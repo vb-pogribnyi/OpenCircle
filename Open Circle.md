@@ -6,9 +6,136 @@ This article is an attempt to describe a machine learning model performance for 
 
 ## 1. Dataset
 
-The dataset consists of images of open circles 30x30 pixels.
+The dataset consists of images of open circles 30x30 pixels. There will be something I call 'core image', which is a collection of x-y coordinates of points, meant to be connected by lines. This core image will be then drawn on a bitmap, a noise will be added to it, and it will be fed to the NN model.
 
-We use bezier lines for curved parts
+The core image will represent a circle itself. But since I want to generate all kinds of circle variations, including ovals, circles with linear edges (half circle - half rectangle) - I will need to introduce some additional logic. After the image is generated - it will be scaled and rotated at a random angle, because, again, we want to generate all kinds of circles.
+
+I guess the introduction was not really clear about what we're going to do. I will explain all the details below, and include examples. So keep up!
+
+Code described in this chapter is assumed to be kept in a single file called 'generate_dataset.py'
+
+### 1.1 Bezier curves
+
+So, our core image consists of curved parts and linear parts. The curved parts may be modeled different ways, but I prefer bezier curves, because of their simplicity and flexibility. The curve will be built on three points. The first point will be (0, 0), two other will define at what points our circle touches edges. 
+
+For example, if I want to build a circle with no linear parts, I will choose these points:
+
+```python
+point1 = {'x': 0, 'y': 0.5}
+point2 = {'x': 0, 'y': 0}
+point3 = {'x': 0.5, 'y': 0}
+```
+
+If I build a bezier curve on these points, I will get something like this:
+
+![curve_1](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\01_dataset\curve_1.png)
+
+The code so far looks as follows:
+
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+
+def get_corner_points(n):
+    point1 = {'x': 0, 'y': 0.5}
+    point2 = {'x': 0, 'y': 0}
+    point3 = {'x': 0.5, 'y': 0}
+
+    xs = np.zeros(n)
+    ys = np.zeros(n)
+    for i, t in enumerate(np.linspace(0, 1, n)):
+        xs[i] = (1-t)**2 * point1['x'] + \
+                2*(1-t)*t * point2['x'] + \
+                (t)**2 * point3['x']
+        ys[i] = (1-t)**2 * point1['y'] + \
+                2*(1-t)*t * point2['y'] + \
+                (t)**2 * point3['y']
+    xs = np.array(xs)
+    ys = np.array(ys)
+    return xs, ys
+
+if __name__ == '__main__':
+    xs, ys = get_corner_points(100)
+    plt.plot(xs, ys)
+    plt.gcf().set_size_inches(5, 5)
+    plt.show()
+```
+
+The get_corner_points function builds the curve itself. It accepts the number of points generated, as parameter. The function is called this way because it generates 'corners' of our circle. If I mirror them around the image, I will get a complete circle. In other words, if I changed the main code this way:
+
+```python
+if __name__ == '__main__':
+    xs, ys = get_corner_points(100)
+    plt.plot(xs, ys)
+    plt.plot(1 - xs, ys)
+    plt.plot(xs, 1 - ys)
+    plt.plot(1 - xs, 1 - ys)
+    plt.gcf().set_size_inches(5, 5)
+    plt.show()
+```
+
+I will get this kind of circle:![curve_2](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\01_dataset\curve_2.png)
+
+Notice that our circle touches axis at points (0, 0.5), (0.5, 0). So if I change my bezier points to something like this:
+
+```python
+point1 = {'x': 0, 'y': 0.4}
+point2 = {'x': 0, 'y': 0}
+point3 = {'x': 0.4, 'y': 0}
+```
+
+I will get the following:
+
+![curve_3](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\01_dataset\curve_3.png)
+
+Now if  I want to get a circle with flat sides, I have to generate an image like this and connect the gaps. But before that, let's add a minor change to the existing code. Let's add another two parameters to the get_corner_points(), so that we can generate circles with larger or smaller flat sides:
+
+```python
+def get_corner_points(p1, p2, n):
+    point1 = {'x': 0, 'y': 0.5 * p1}
+    point2 = {'x': 0, 'y': 0}
+    point3 = {'x': 0.5 * p2, 'y': 0}
+```
+
+Parameters p1 and p2 will vary in range (0, 1) - giving a square at 0 and a circle at 1. The example when p1 = 0.4 and p2 = 0.8 looks like this:
+
+![curve_4](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\01_dataset\curve_4.png)
+
+The full code so far is like this:
+
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+
+def get_corner_points(p1, p2, n):
+    point1 = {'x': 0, 'y': 0.5 * p1}
+    point2 = {'x': 0, 'y': 0}
+    point3 = {'x': 0.5 * p2, 'y': 0}
+
+    xs = np.zeros(n)
+    ys = np.zeros(n)
+    for i, t in enumerate(np.linspace(0, 1, n)):
+        xs[i] = (1-t)**2 * point1['x'] + \
+                2*(1-t)*t * point2['x'] + \
+                (t)**2 * point3['x']
+        ys[i] = (1-t)**2 * point1['y'] + \
+                2*(1-t)*t * point2['y'] + \
+                (t)**2 * point3['y']
+    xs = np.array(xs)
+    ys = np.array(ys)
+    return xs, ys
+
+if __name__ == '__main__':
+    xs, ys = get_corner_points(0.4, 0.8, 100)
+    plt.plot(xs, ys)
+    plt.plot(1 - xs, ys)
+    plt.plot(xs, 1 - ys)
+    plt.plot(1 - xs, 1 - ys)
+    plt.gcf().set_size_inches(5, 5)
+    plt.show()
+```
+
+
 
 We will leave open part on the circle at some angle. The label will be sin and cos of that angle, because it will make easier to set the objective for the training.
 
