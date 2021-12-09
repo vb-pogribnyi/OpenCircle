@@ -135,9 +135,323 @@ if __name__ == '__main__':
     plt.show()
 ```
 
+### 1.2 Full circle
+
+After the corner parts are created, they should be connected to complete the circle. What's more, we want all the points to be distributed uniformly (which means that the distance between two neighboring points is roughly the same over all the images).
+
+So, first things first. Let's create a function that will generate our circle. It will accept the same parameters as the get_corner_points(). The third parameter 'n' will be the number of points in the (whole) resulting circle.
+
+```python
+def get_circle(p1, p2, n):
+    corner1_xs, corner1_ys = get_corner_points(p1, p2, n)
+    corner2_xs, corner2_ys = 1 - corner1_xs, corner1_ys
+    corner3_xs, corner3_ys = corner1_xs, 1 - corner1_ys
+    corner4_xs, corner4_ys = 1 - corner1_xs, 1 - corner1_ys
+```
+
+ This is exactly the same as the main function from the previous chapter. But there is an issue with points ordering. Let's draw these corners again, but also mark the first and last points for each corner:
+
+ ![curve_5](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\01_dataset\circle_5.png)
+
+The image on the right shows what we have now. Notice that if we follow the order of the points counter-clockwise, we start at corner 4, first point, then meet corner 4 last point, then corner 3 last point, corner 3 first point, corner 1 first point, and so on. I want to reorder things around so they look like on the image on the left:
+
+```python
+def get_circle(p1, p2, n):
+    corner3_xs, corner3_ys = get_corner_points(p1, p2, n)
+    corner4_xs, corner4_ys = 1 - corner3_xs[::-1], \
+                             corner3_ys[::-1]
+    corner2_xs, corner2_ys = corner3_xs[::-1], \
+                             1 - corner3_ys[::-1]
+    corner1_xs, corner1_ys = 1 - corner3_xs, 1 - corner3_ys
+```
+
+Now adding the lines between the corners is not a problem:
+
+```python
+    line12_y = np.ones(n)
+    line12_x = np.linspace(corner1_xs[-1],
+                           corner2_xs[0], n + 2)[1:-1]
+    line23_y = np.linspace(corner2_ys[-1],
+                           corner3_ys[0], n + 2)[1:-1]
+    line23_x = np.zeros(n)
+    line34_y = np.zeros(n)
+    line34_x = np.linspace(corner3_xs[-1],
+                           corner4_xs[0], n + 2)[1:-1]
+    line41_y = np.linspace(corner4_ys[-1],
+                           corner1_ys[0], n + 2)[1:-1]
+    line41_x = np.ones(n)
+```
+
+Here line index determines what corners the line connects. For example, line12 connects corner1 and corner2; line41 connects corner4 and corner1, and so on.
+
+Let's print the result and see what we have:
+
+```python
+    plt.plot(corner1_xs, corner1_ys)
+    plt.plot(line12_x, line12_y)
+    plt.plot(corner2_xs, corner2_ys)
+    plt.plot(line23_x, line23_y)
+    plt.plot(corner3_xs, corner3_ys)
+    plt.plot(line34_x, line34_y)
+    plt.plot(corner4_xs, corner4_ys)
+    plt.plot(line41_x, line41_y)
+    plt.gcf().set_size_inches(5, 5)
+    plt.show()
+```
+
+![circle_6](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\01_dataset\circle_6.png)
+
+Looks fine. Now let's collect all the points in one array, by concatenation. There is only one issue. I want the array's first point to be the one at 'zero degrees', or this one:
+
+![circle_7](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\01_dataset\circle_7.png)
+
+This will make me to divide line41 into halves, then concatenate the points:
+
+```python
+    xs = np.concatenate([
+        line41_x[len(line41_x) // 2:],
+        corner1_xs, line12_x,
+        corner2_xs, line23_x,
+        corner3_xs, line34_x,
+        corner4_xs, line41_x[:len(line41_x) // 2]
+    ])
+    ys = np.concatenate([
+        line41_y[len(line41_y) // 2:],
+        corner1_ys, line12_y,
+        corner2_ys, line23_y,
+        corner3_ys, line34_y,
+        corner4_ys, line41_y[:len(line41_y) // 2]
+    ])
+```
+
+Now by plotting the xs and ys, and by plotting them partially, we get our open circle core image:
+
+```python
+    plt.subplot(1, 2, 1)
+    plt.plot(xs, ys)
+    plt.subplot(1, 2, 2)
+    plt.plot(xs[15:-15], ys[15:-15])
+    plt.gcf().set_size_inches(10, 5)
+    plt.show()
+```
+
+![circle_8](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\01_dataset\circle_8.png)
+
+Now we need to make sure that the distance between the points is uniform. The easy way to do it would be to use numpy interp function. To do that, I will create an array of distances for the current image, then an array of desired (uniform) distances, and interpolate the xs and ys arrays on the desired distances:
+
+```python
+    dx = np.diff(xs)
+    dy = np.diff(ys)
+    distances = np.square(dx ** 2 + dy ** 2)
+    location_old = [0]
+    for d in distances:
+        location_old.append(location_old[-1] + d)
+    location_old = np.array(location_old)
+    location_old /= np.sum(distances)
+    location_new = np.linspace(0, 1, n)
+    xs = np.interp(location_new, location_old, xs)
+    ys = np.interp(location_new, location_old, ys)
+```
+
+Now xs and ys arrays have n items each, and if we plot the images above again, we get:
+
+![circle_9](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\01_dataset\circle_9.png)
+
+Notice that image on the left is cut by 30% (since we do this line):
+
+```python
+plt.plot(xs[15:-15], ys[15:-15])
+```
+
+Now I will add to this function only a return value. The final code looks like this (assuming the code from the previous chapter is still at place):
+
+```python
+def get_circle(p1, p2, n):
+    corner3_xs, corner3_ys = get_corner_points(p1, p2, n)
+    corner4_xs, corner4_ys = 1 - corner3_xs[::-1], \
+                             corner3_ys[::-1]
+    corner2_xs, corner2_ys = corner3_xs[::-1], \
+                             1 - corner3_ys[::-1]
+    corner1_xs, corner1_ys = 1 - corner3_xs, 1 - corner3_ys
+    line12_y = np.ones(n)
+    line12_x = np.linspace(corner1_xs[-1],
+                           corner2_xs[0], n + 2)[1:-1]
+    line23_y = np.linspace(corner2_ys[-1],
+                           corner3_ys[0], n + 2)[1:-1]
+    line23_x = np.zeros(n)
+    line34_y = np.zeros(n)
+    line34_x = np.linspace(corner3_xs[-1],
+                           corner4_xs[0], n + 2)[1:-1]
+    line41_y = np.linspace(corner4_ys[-1],
+                           corner1_ys[0], n + 2)[1:-1]
+    line41_x = np.ones(n)
+
+    xs = np.concatenate([
+        line41_x[len(line41_x) // 2:],
+        corner1_xs, line12_x,
+        corner2_xs, line23_x,
+        corner3_xs, line34_x,
+        corner4_xs, line41_x[:len(line41_x) // 2]
+    ])
+    ys = np.concatenate([
+        line41_y[len(line41_y) // 2:],
+        corner1_ys, line12_y,
+        corner2_ys, line23_y,
+        corner3_ys, line34_y,
+        corner4_ys, line41_y[:len(line41_y) // 2]
+    ])
+
+    dx = np.diff(xs)
+    dy = np.diff(ys)
+    distances = np.square(dx ** 2 + dy ** 2)
+    location_old = [0]
+    for d in distances:
+        location_old.append(location_old[-1] + d)
+    location_old = np.array(location_old)
+    location_old /= np.sum(distances)
+    location_new = np.linspace(0, 1, n)
+    xs = np.interp(location_new, location_old, xs)
+    ys = np.interp(location_new, location_old, ys)
+
+    return xs, ys
 
 
-We will leave open part on the circle at some angle. The label will be sin and cos of that angle, because it will make easier to set the objective for the training.
+if __name__ == '__main__':
+    xs, ys = get_circle(0.4, 0.8, 100)
+    plt.subplot(1, 2, 1)
+    plt.plot(xs, ys)
+    plt.subplot(1, 2, 2)
+    plt.plot(xs[15:-15], ys[15:-15])
+    plt.gcf().set_size_inches(10, 5)
+    plt.show()
+```
+
+### 1.3 Random transform
+
+To generate the 'all kinds of open circles', let's rotate and scale what we have. The operation will be done by matrix multiplication. The function responsible for this transform will be accepting the following parameters:
+
+- x and y coordinates of our circle
+- rotation angle
+- scale x, scale y
+
+Let's create a stub for the function:
+
+```python
+def transform(xs, ys, theta, xscale, yscale):
+    for i in range(len(xs)):
+        pass # Do matrix multiplication
+    return xs, ys
+```
+
+To rotate a point around origin of coordinates, we have to multiply it by the following matrix (see Wikipedia for rotation matrix):
+$$
+\left[ 
+\begin{array}{c | c} 
+  \begin{array}{c c c} 
+     \hat{x}\\ 
+     \hat{y}
+  \end{array} \\ 
+ \end{array} 
+\right] = \left[ 
+\begin{array}{c | c} 
+  \begin{array}{c c c} 
+     cos\theta & -sin\theta\\ 
+     sin\theta & cos\theta
+  \end{array} \\ 
+ \end{array} 
+\right]\left[ 
+\begin{array}{c | c} 
+  \begin{array}{c c c} 
+     x\\ 
+     y
+  \end{array} \\ 
+ \end{array} 
+\right]
+$$
+There are two issues for now: first, we need to move the center of our circle to the origin of coordinates. Second, our theta has to be in radians. Let's fix these in code, and add the matrix coefficients:
+
+```python
+def transform(xs, ys, theta, xscale, yscale):
+    # Move to origin of coordinates
+    xs -= 0.5
+    ys -= 0.5
+    # Convert theta to rad
+    theta = theta / 180 * np.pi
+    a11 = np.cos(theta)
+    a12 = -np.sin(theta)
+    a21 = np.sin(theta)
+    a22 = np.cos(theta)
+    for i in range(len(xs)):
+        pass # Do matrix multiplication
+    return xs, ys
+```
+
+Now we only have to do actual scaling and matrix multiplication. Let's add these to the code:
+
+```python
+def transform(xs, ys, theta, xscale, yscale):
+    # Move to origin of coordinates
+    xs -= 0.5
+    ys -= 0.5
+    # Convert theta to rad
+    theta = theta / 180 * np.pi
+
+    xs *= xscale
+    ys *= yscale
+    a11 = np.cos(theta)
+    a12 = -np.sin(theta)
+    a21 = np.sin(theta)
+    a22 = np.cos(theta)
+    for i in range(len(xs)):
+        x, y = xs[i], ys[i]
+        xs[i] = x * a11 + y * a12
+        ys[i] = x * a21 + y * a22
+    return xs, ys
+```
+
+Also don't forget to return the image back from the center of the origin. The full function along with the code calling it looks like this:
+
+```python
+def transform(xs, ys, theta, xscale, yscale):
+    # Move to origin of coordinates
+    xs -= 0.5
+    ys -= 0.5
+    # Convert theta to rad
+    theta = theta / 180 * np.pi
+
+    xs *= xscale
+    ys *= yscale
+    a11 = np.cos(theta)
+    a12 = -np.sin(theta)
+    a21 = np.sin(theta)
+    a22 = np.cos(theta)
+    for i in range(len(xs)):
+        x, y = xs[i], ys[i]
+        xs[i] = x * a11 + y * a12
+        ys[i] = x * a21 + y * a22
+    xs += 0.5
+    ys += 0.5
+    
+    return xs, ys
+
+
+if __name__ == '__main__':
+    xs, ys = get_circle(0.4, 0.8, 100)
+    xs, ys = transform(xs, ys, 10, 0.8, 1.3)
+
+    plt.subplot(1, 2, 1)
+    plt.plot(xs, ys)
+    plt.subplot(1, 2, 2)
+    plt.plot(xs[15:-15], ys[15:-15])
+    plt.gcf().set_size_inches(10, 5)
+    plt.show()
+```
+
+If we run the code, we get the following image:
+
+![circle_10](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\01_dataset\circle_10.png)
+
+Now we're ready to move to the next stage - draw an actual image, with pixels - using OpenCV.
 
 The image itself is drawn using OpenCV
 
