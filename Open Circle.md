@@ -453,9 +453,210 @@ If we run the code, we get the following image:
 
 Now we're ready to move to the next stage - draw an actual image, with pixels - using OpenCV.
 
-The image itself is drawn using OpenCV
+### 1.4 Converting to pixels
 
-Noise is added ontop of the image both as a white noise and line disturbances
+The function we're about to write will be accepting an array of point coordinates (which we already have), and output our final 30x30 image. The function will draw the points as lines, and will use OpenCV library for that. So the first thing is, obviously, to import OpenCV to our project:
+
+```python
+import cv2 as cv
+```
+
+Next let's make our function stub and change main function so that we can see the result:
+
+```python
+def to_image(xs, ys, img_size):
+    result = np.zeros((img_size, img_size))
+
+    return result
+
+
+if __name__ == '__main__':
+    xs, ys = get_circle(0.4, 0.8, 100)
+    xs, ys = transform(xs, ys, 10, 0.8, 1.3)
+    img = to_image(xs, ys, 30)
+
+    plt.pcolor(img, cmap='Wistia')
+    plt.gcf().set_size_inches(5, 5)
+    plt.show()
+```
+
+Now let's add drawing procedure. Keep in mind that our core image is in range (0, 1) - this should be mapped to (0, img_size), otherwise our image will appear as a single dot:
+
+```python
+def to_image(xs, ys, img_size):
+    result = np.zeros((img_size, img_size))
+    xs = (xs * img_size).astype(int)
+    ys = (ys * img_size).astype(int)
+    thickness = 1
+    for i in range(1, len(xs)):
+        cv.line(result, 
+                (xs[i - 1], ys[i - 1]), 
+                (xs[i], ys[i]), 1, thickness)
+
+    return result
+```
+
+After running the code, we get the following image:
+
+![image_1](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\01_dataset\image_1.png)
+
+Notice that the parts where our core image has gone below zero or above one - are not drawn. We can draw another image with smaller scale values, so that it fits:
+
+```python
+xs, ys = transform(xs, ys, 10, 0.8, 0.6)
+```
+
+And get this:![image_2](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\01_dataset\image_2.png)
+
+Yep, this is how our image looks like. Let's add noise to it, since we know that we need noise in order to train a neural network. We will be adding multiple kind of noises. First is vertical/horizontal shift, so that all points are shifted at random value:
+
+```python
+    # Add shift noise
+    shift_x = np.random.uniform(-0.1, 0.1)
+    shift_y = np.random.uniform(-0.1, 0.1)
+    xs += shift_x
+    ys += shift_y
+```
+
+Second is noise added to every point:
+
+```python
+    # Every point noise
+    img_noise_std = np.random.uniform(0.01, 0.03)
+    xs += np.random.normal(0, img_noise_std, xs.shape)
+    ys += np.random.normal(0, img_noise_std, ys.shape)
+```
+
+These types of noise are applied before the image is scaled. Third type of noise will be regular white noise, and will be applied to the whole image after it is drawn:
+
+```python
+# White noise
+white_noise_std = np.random.uniform(0.1, 0.3)
+result += np.random.normal(0, white_noise_std, result.shape)
+```
+
+Here is the full function code:
+
+```python
+def to_image(xs, ys, img_size):
+    result = np.zeros((img_size, img_size))
+
+    # Add shift noise
+    shift_x = np.random.uniform(-0.1, 0.1)
+    shift_y = np.random.uniform(-0.1, 0.1)
+    xs += shift_x
+    ys += shift_y
+
+    # Every point noise
+    img_noise_std = np.random.uniform(0.01, 0.03)
+    xs += np.random.normal(0, img_noise_std, xs.shape)
+    ys += np.random.normal(0, img_noise_std, ys.shape)
+
+    xs = (xs * img_size).astype(int)
+    ys = (ys * img_size).astype(int)
+
+    thickness = 1
+    for i in range(1, len(xs)):
+        cv.line(result,
+                (xs[i - 1], ys[i - 1]),
+                (xs[i], ys[i]), 1, thickness)
+    # White noise
+    white_noise_std = np.random.uniform(0.1, 0.3)
+    result += np.random.normal(0, white_noise_std, result.shape)
+
+
+    return result
+
+
+if __name__ == '__main__':
+    xs, ys = get_circle(0.4, 0.8, 100)
+    xs, ys = transform(xs, ys, 10, 0.8, 0.6)
+    img = to_image(xs, ys, 30)
+
+    plt.pcolor(img, cmap='Wistia')
+    plt.gcf().set_size_inches(5, 5)
+    plt.show()
+```
+
+And here is our output so far:
+
+![image_3](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\01_dataset\image_3.png)
+
+This looks fine, but I'd like to add a couple more details. First, blur. I'd like to have the core image a little blurred, then noise a little blurred also, then add not blurred noise ontop. Here's what it looks like in code:
+
+```python
+    # Blur image and noise
+    blur_noise_std = np.random.uniform(0.1, 0.3)
+    blur_noise = np.random.normal(0, blur_noise_std, result.shape)
+    img_blur = np.random.randint(1, 3)
+    noise_blur = np.random.randint(1, 5)
+    cv.blur(result, (img_blur, img_blur), result)
+    cv.blur(blur_noise, (noise_blur, noise_blur), blur_noise)
+    result += blur_noise
+```
+
+Second, line thickness. I'd like to randomize it as well. This is an easy change, since we use 'thickness' in cv.line() call. I just have to initialize the thickness to a random value:
+
+```python
+thickness = np.random.randint(1, 4)
+```
+
+Here's what a sample output looks like:
+
+![image_4](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\01_dataset\image_4.png)
+
+Now the last part. Before feeding this image into a model, we have to make sure that its values lie in certain range (0 to 1). To do that, I will add the following lines:
+
+```python
+    result -= result.min()
+    result /= result.max()
+```
+
+That's it for the image. Here's what the full function code looks like:
+
+```python
+def to_image(xs, ys, img_size):
+    result = np.zeros((img_size, img_size))
+
+    # Add shift noise
+    shift_x = np.random.uniform(-0.1, 0.1)
+    shift_y = np.random.uniform(-0.1, 0.1)
+    xs += shift_x
+    ys += shift_y
+
+    # Every point noise
+    img_noise_std = np.random.uniform(0.01, 0.03)
+    xs += np.random.normal(0, img_noise_std, xs.shape)
+    ys += np.random.normal(0, img_noise_std, ys.shape)
+
+    xs = (xs * img_size).astype(int)
+    ys = (ys * img_size).astype(int)
+
+    thickness = np.random.randint(1, 4)
+    for i in range(1, len(xs)):
+        cv.line(result,
+                (xs[i - 1], ys[i - 1]),
+                (xs[i], ys[i]), 1, thickness)
+
+    # Blur image and noise
+    blur_noise_std = np.random.uniform(0.1, 0.3)
+    blur_noise = np.random.normal(0, blur_noise_std, result.shape)
+    img_blur = np.random.randint(1, 3)
+    noise_blur = np.random.randint(1, 5)
+    cv.blur(result, (img_blur, img_blur), result)
+    cv.blur(blur_noise, (noise_blur, noise_blur), blur_noise)
+    result += blur_noise
+
+    # White noise
+    white_noise_std = np.random.uniform(0.1, 0.3)
+    result += np.random.normal(0, white_noise_std, result.shape)
+
+    result -= result.min()
+    result /= result.max()
+    return result
+```
+
+
 
 ## 2. Model
 

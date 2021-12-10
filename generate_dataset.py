@@ -1,3 +1,4 @@
+import cv2 as cv
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -90,14 +91,52 @@ def transform(xs, ys, theta, xscale, yscale):
 
     return xs, ys
 
+def to_image(xs, ys, img_size):
+    result = np.zeros((img_size, img_size))
+
+    # Add shift noise
+    shift_x = np.random.uniform(-0.1, 0.1)
+    shift_y = np.random.uniform(-0.1, 0.1)
+    xs += shift_x
+    ys += shift_y
+
+    # Every point noise
+    img_noise_std = np.random.uniform(0.01, 0.03)
+    xs += np.random.normal(0, img_noise_std, xs.shape)
+    ys += np.random.normal(0, img_noise_std, ys.shape)
+
+    xs = (xs * img_size).astype(int)
+    ys = (ys * img_size).astype(int)
+
+    thickness = np.random.randint(1, 4)
+    for i in range(1, len(xs)):
+        cv.line(result,
+                (xs[i - 1], ys[i - 1]),
+                (xs[i], ys[i]), 1, thickness)
+
+    # Blur image and noise
+    blur_noise_std = np.random.uniform(0.1, 0.3)
+    blur_noise = np.random.normal(0, blur_noise_std, result.shape)
+    img_blur = np.random.randint(1, 3)
+    noise_blur = np.random.randint(1, 5)
+    cv.blur(result, (img_blur, img_blur), result)
+    cv.blur(blur_noise, (noise_blur, noise_blur), blur_noise)
+    result += blur_noise
+
+    # White noise
+    white_noise_std = np.random.uniform(0.1, 0.3)
+    result += np.random.normal(0, white_noise_std, result.shape)
+
+    result -= result.min()
+    result /= result.max()
+    return result
+
 
 if __name__ == '__main__':
     xs, ys = get_circle(0.4, 0.8, 100)
-    xs, ys = transform(xs, ys, 10, 0.8, 1.3)
+    xs, ys = transform(xs, ys, 10, 0.8, 0.6)
+    img = to_image(xs, ys, 30)
 
-    plt.subplot(1, 2, 1)
-    plt.plot(xs, ys)
-    plt.subplot(1, 2, 2)
-    plt.plot(xs[15:-15], ys[15:-15])
-    plt.gcf().set_size_inches(10, 5)
+    plt.pcolor(img, cmap='Wistia')
+    plt.gcf().set_size_inches(5, 5)
     plt.show()
