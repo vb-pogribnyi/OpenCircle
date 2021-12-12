@@ -1,5 +1,6 @@
 import cv2 as cv
 import numpy as np
+from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 def get_corner_points(p1, p2, n):
@@ -132,11 +133,41 @@ def to_image(xs, ys, img_size):
     return result
 
 
-if __name__ == '__main__':
-    xs, ys = get_circle(0.4, 0.8, 100)
-    xs, ys = transform(xs, ys, 10, 0.8, 0.6)
-    img = to_image(xs, ys, 30)
+def generate_image():
+    n_circle_pts = 350
 
-    plt.pcolor(img, cmap='Wistia')
-    plt.gcf().set_size_inches(5, 5)
+    # Parameters randomization
+    angle = np.random.uniform(0, 360)
+    open_percent = np.random.uniform(10, 40)
+    circle_p1 = np.random.uniform(0.7, 1.)
+    circle_p2 = np.random.uniform(0.7, 1.)
+    scale_x = np.random.uniform(0.5, 1.1)
+    scale_y = np.random.uniform(0.5, 1.1)
+
+    n_pts_skip = int(n_circle_pts / 100 * open_percent)
+    angle_rad = angle / 180 * np.pi
+    xs, ys = get_circle(circle_p1, circle_p2, n_circle_pts)
+    xs, ys = transform(xs, ys, angle, scale_x, scale_y)
+    img = to_image(xs[n_pts_skip // 2:-n_pts_skip // 2],
+                   ys[n_pts_skip // 2:-n_pts_skip // 2], 30)
+
+    label = [np.sin(angle_rad), np.cos(angle_rad)]
+    return img, label
+
+
+if __name__ == '__main__':
+    for i in range(16):
+        img, label = generate_image()
+        plt.subplot(4, 4, i + 1)
+        plt.pcolor(img, cmap='Wistia')
+    plt.gcf().set_size_inches(8, 8)
     plt.show()
+
+    n_images = 256 * 1024
+    images, labels = [], []
+    for i in tqdm(range(n_images)):
+        img, label = generate_image()
+        images.append(img)
+        labels.append(label)
+    np.save('images.npy', np.array(images))
+    np.save('labels.npy', np.array(labels))
