@@ -979,35 +979,261 @@ Now if you run this on your machine, after a while you will have a dataset to tr
 
 ## 2. Model
 
-We will test several architectures:
+We will test two different architectures, for start (then we'll try to improve them):
 
 - Two large kernels (5-7 px), large pooling (2-4 px), dense
 - Two small kernels (3 px), large kernel (5 px) 4 channels, 2 px pooling between them, dense layer
-- Two small kernels (3 px), large kernel 5 px 1 channel, flipped vertically and horizontally to obtain 4 outputs, dense layer
-- One large kernel (5-7 px), large kernel 5 px 1 channel, flipped vertically and horizontally to obtain 4 outputs, dense layer
 
 For each architecture, we will launch multiple experiments with different number of channels, to figure out which layers are important.
 
-In this article we will describe the process for the following architecture:
+### 2.1 LargeWin
 
-- Conv 3x3, 1 channel
-- Tanh activation
-- Avg pooling
-- 
-- Conv 3x3, 1 channel
-- Tanh activation
-- Avg pooling
-- 
-- Conv 5x5, 4 channels
-- Tanh activation
-- Avg pooling
-- 
-- Dense layer, 4x2
-- Tanh activation
-- Dense layer 2x2
+LargeWin is a code name for "Two large kernels (5-7 px), large pooling (2-4 px), dense" model. In more detail, this model looks as follows:
+
+- Conv 2d
+
 - Tanh activation
 
-The output (2 values) corresponds to sin and cos of the target angle.
+- Avg pooling
+
+  
+
+- Conv 2d
+
+- Tanh activation
+
+- Avg pooling
+
+  
+
+- Flattening
+
+- Dense layer
+
+- Tanh activation
+
+- Dense layer
+
+- Tanh activation
+
+And here is the list of parameters being varied:
+
+- Convolutions filters number
+- Convolutions kernel size
+- Pooling size
+- Dense network - number of hidden neurons
+
+So here is our starting draft for the model class code:
+
+```python
+import torch
+
+class LargeWin(torch.nn.Module):
+    def __init__(self, params):
+        ch1, ch2 = params['ch1'], params['ch2']
+        ch3 = params['ch3']
+        pool1_size = params['pool1_size']
+        pool2_size = params['pool2_size']
+        ks1, ks2 = params['ks1'], params['ks2']
+        super(LargeWin, self).__init__()
+
+    def forward(self, x):
+        return x
+```
+
+I'm passing the parameters here as a dict, so that it will be easier to automate testing later on. Among the parameters there are: ch1, ch2 = number of filters for the convolutions. Ch3 - number of hidden neurons for the dense network. Pool1_size and pool2_size - sizes of the pooling layers after the convolutions. Ks1 and ks2 - convolutions kernel sizes. 
+
+Let's now add the network layers. Note that dense layer input size (after flattening) will depend on the size of kernels and pooling windows. It will be calculated in the constructor as well:
+
+```python
+        self.conv1 = torch.nn.Conv2d(1, ch1, ks1)
+        self.conv2 = torch.nn.Conv2d(ch1, ch2, ks2)
+        img_size1 = (img_size - ks1 // 2 * 2) // pool1_size
+        img_size2 = (img_size1 - ks2 // 2 * 2) // pool2_size
+        ch_in = img_size2 ** 2 * ch2
+        if ch_in > 4 or img_size2 <= 0:
+            raise Exception('Crazy input')
+        self.dense1 = torch.nn.Linear(ch_in, ch3)
+        self.dense2 = torch.nn.Linear(ch3, 2)
+        self.pool1 = torch.nn.AvgPool2d(pool1_size)
+        self.pool2 = torch.nn.AvgPool2d(pool2_size)
+```
+
+Here I'm ignoring the cases where the number of inputs is larger than 4, because it will be harder to visualize.
+
+The forward() calls the layers one by one, adding poolings and nonlinearities between them. Here is how the full code for the model looks like:
+
+```python
+import torch
+
+class LargeWin(torch.nn.Module):
+    def __init__(self, params):
+        img_size = 30
+        ch1, ch2 = params['ch1'], params['ch2']
+        ch3 = params['ch3']
+        pool1_size = params['pool1_size']
+        pool2_size = params['pool2_size']
+        ks1, ks2 = params['ks1'], params['ks2']
+        super(LargeWin, self).__init__()
+
+        self.conv1 = torch.nn.Conv2d(1, ch1, ks1)
+        self.conv2 = torch.nn.Conv2d(ch1, ch2, ks2)
+        img_size1 = (img_size - ks1 // 2 * 2) // pool1_size
+        img_size2 = (img_size1 - ks2 // 2 * 2) // pool2_size
+        ch_in = img_size2 ** 2 * ch2
+        if ch_in > 4 or img_size2 <= 0:
+            raise Exception('Crazy input')
+        self.dense1 = torch.nn.Linear(ch_in, ch3)
+        self.dense2 = torch.nn.Linear(ch3, 2)
+        self.pool1 = torch.nn.AvgPool2d(pool1_size)
+        self.pool2 = torch.nn.AvgPool2d(pool2_size)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.pool1(x)
+        x = torch.tanh(x)
+
+        x = self.conv2(x)
+        x = self.pool2(x)
+        x = torch.tanh(x)
+
+        x = x.reshape([x.shape[0], -1])
+        x = self.dense1(x)
+        x = torch.tanh(x)
+        x = self.dense2(x)
+
+        return torch.tanh(x)
+```
+
+### 2.2 SmallWin
+
+Next we move on to the model with smaller kernels and poolings. It will look very similar to the previous one, except there will be three convolutional layers instead of two, and the size of poolings will be uniform.
+
+```python
+class SmallWin(torch.nn.Module):
+    def __init__(self, params):
+        ch1, ch2 = params['ch1'], params['ch2']
+        ch3, ch4 = params['ch3'], params['ch4']
+        ks1, ks2 = params['ks1'], params['ks2']
+        img_size = 30
+        pool_size = 2
+        super(SmallWin, self).__init__()
+        self.conv1 = torch.nn.Conv2d(1, ch1, ks1)
+        self.conv2 = torch.nn.Conv2d(ch1, ch2, ks2)
+        self.conv3 = torch.nn.Conv2d(ch2, ch3, ks3)
+
+        img_size1 = (img_size - ks1 // 2 * 2) // pool_size
+        img_size2 = (img_size1 - ks2 // 2 * 2) // pool_size
+        img_size3 = (img_size2 - ks3 // 2 * 2) // pool_size
+        ch_in = img_size3 ** 2 * ch3
+        if ch_in > 4 or img_size3 <= 0:
+            raise Exception('Crazy input')
+        self.dense1 = torch.nn.Linear(ch_in, ch4)
+        self.dense2 = torch.nn.Linear(ch4, 2)
+        self.pool = torch.nn.AvgPool2d(pool_size)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.pool(x)
+        x = torch.tanh(x)
+
+        x = self.conv2(x)
+        x = self.pool(x)
+        x = torch.tanh(x)
+
+        x = self.conv3(x)
+        x = self.pool(x)
+        x = torch.tanh(x)
+
+        x = x.reshape([x.shape[0], -1])
+        x = self.dense1(x)
+        x = torch.tanh(x)
+        x = self.dense2(x)
+
+        return torch.tanh(x)
+```
+
+Note that we check if image size after convolutions is negative. This may happen if we test the network with both large pooling and large kernel. 
+
+### 2.3 Testing the models
+
+Okay, this was a lot of code and we did not run it yet. Let's fix this now. We'll create a main function, that will run a sample input through the model. But first we need to generate this sample, so let's import our generate_dataset.py:
+
+```python
+from generate_dataset import generate_image
+```
+
+And now add the function itself:
+
+```python
+if __name__ == '__main__':
+    img, label = generate_image()
+    print(img.shape)
+```
+
+Next we'll create the model objects. Note that they receive parameters as a dict, so it will look somewhat weird. Let's start with LargeWin model:
+
+```python
+if __name__ == '__main__':
+    img, label = generate_image()
+    print(img.shape)
+    modelLargeWin = LargeWin({
+        "ch1": 4, 'ch2': 4, 'ch3': 4,
+        'pool1_size': 4, 'pool2_size': 2,
+        'ks1': 7, 'ks2': 5
+    })
+```
+
+Next we'll run the image through the model, but first we need to convert it to a tensor, and make it right shape (add examples and channels dimensions):
+
+```python
+if __name__ == '__main__':
+    img, label = generate_image()
+    print(img.shape)
+    modelLargeWin = LargeWin({
+        "ch1": 4, 'ch2': 4, 'ch3': 4,
+        'pool1_size': 4, 'pool2_size': 2,
+        'ks1': 7, 'ks2': 5
+    })
+
+    img_t = torch.tensor(img).float()
+    img_t = img_t.unsqueeze(0).unsqueeze(0)
+    outLargeWin = modelLargeWin(img_t)
+    print('LargeWin', outLargeWin)
+```
+
+This should output original image size and the model output:
+
+```
+(30, 30)
+LargeWin tensor([[-0.5127,  0.0033]], grad_fn=<TanhBackward>)
+```
+
+Now we need to add a similar test for the second model. Here is how the final main function looks:
+
+```python
+if __name__ == '__main__':
+    img, label = generate_image()
+    print(img.shape)
+    modelLargeWin = LargeWin({
+        "ch1": 4, 'ch2': 4, 'ch3': 4,
+        'pool1_size': 4, 'pool2_size': 2,
+        'ks1': 7, 'ks2': 5
+    })
+    modelSmallWin = SmallWin({
+        "ch1": 4, 'ch2': 4, 'ch3': 4, 'ch4': 4,
+        'ks1': 3, 'ks2': 3, 'ks3': 5
+    })
+
+    img_t = torch.tensor(img).float()
+    img_t = img_t.unsqueeze(0).unsqueeze(0)
+    outLargeWin = modelLargeWin(img_t)
+    print('LargeWin', outLargeWin)
+    outSmallWin = modelSmallWin(img_t)
+    print('SmallWin', outSmallWin)
+```
+
+If both models output something healthy (two numbers for sin and cos) - we are ready to move on to training.
 
 ## 3. Training
 
