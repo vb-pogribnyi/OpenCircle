@@ -1237,7 +1237,352 @@ If both models output something healthy (two numbers for sin and cos) - we are r
 
 ## 3. Training
 
-The models are trained with 256k examples with no regularization, using Adam optimizer.
+Now having models, and having the data, we are ready to train the models on the data. Let's start by loading the data, converting it to tensors, and creating a dataloader.
+
+```python
+import os
+import torch
+import numpy as np
+from torch.utils.data import TensorDataset, DataLoader
+
+if __name__ == '__main__':
+    device = torch.device('cuda:0'
+        if torch.cuda.is_available()
+        else 'cpu')
+    data = torch.tensor(np.load('images.npy'))
+    labels = torch.tensor(np.load('labels.npy'))
+    train_data = data.float().unsqueeze(1).to(device)
+    train_labels = labels.float().to(device)
+    train_dataset = TensorDataset(train_data, train_labels)
+    train_dataloader = DataLoader(train_dataset, 1024)
+    print(len(train_dataloader))
+```
+
+Now let's add a function that does actual training. It will accept the model to train and the data to train on. As a result, it will save the trained parameters in a file.
+
+```python
+def train_model(model, parameters, dataloader):
+    opt = torch.optim.Adam(model.parameters())
+    mse = torch.nn.MSELoss()
+    for epoch in range(51):
+        train_loss = 0
+        for input, label in dataloader:
+            opt.zero_grad()
+            out = model(input)
+            loss = mse(out, label)
+            train_loss += loss
+            loss.backward()
+            opt.step()
+        train_loss = train_loss / len(dataloader)
+        if epoch % 10 == 0:
+            print(epoch, train_loss.item())
+    params = list(parameters.values())
+    params_string = '_'.join([str(i) for i in params])
+    file = open('models/{}_{}.pt'.format(
+        type(model).__name__, 
+        params_string
+    ), 'wb')
+    torch.save(model.state_dict(), file)
+```
+
+Well, it will have to take a 'parameters' argument, to know how to call the model. To test the code, I will create a model object in the main function and train it using train_model(). To do that, I will also need to import the file with the models (assuming it's called 'models.py'). Note that the training script saves the model into a 'models' folder, so we need to create that.
+
+```python
+import models
+```
+
+```python
+    os.makedirs('models', exist_ok=True)
+    parameters = {
+        "ch1": 2, 'ch2': 2, 'ch3': 2,
+        'pool1_size': 3, 'pool2_size': 2,
+        'ks1': 5, 'ks2': 7
+    }
+    model = models.LargeWin(parameters).to(device)
+    train_model(model, parameters, train_dataloader)
+```
+
+Also note small number of epochs in the training script. By the way, I'm testing the script with a small dataset, so that it doesn't take long to load the data and to train.
+
+After running the script, we have a 'models' folder created and file 'LargeWin_2_2_2_3_2_5_7.pt' inside, which means the training works fine. Let's now log the process, so that we can easily see which models learn better. We will use mlflow for that:
+
+```python
+import mlflow
+```
+
+I will be using the library in the training script. Will be logging model name and parameters, as well as its loss for each epoch. Here is how the train_model() looks like after we do that:
+
+```python
+def train_model(model, parameters, dataloader):
+    opt = torch.optim.Adam(model.parameters())
+    mse = torch.nn.MSELoss()
+    with mlflow.start_run(run_name="OpenCircle"):
+        mlflow.log_param('model_type', type(model).__name__)
+        for key in parameters:
+            mlflow.log_param(key, parameters[key])
+        for epoch in range(51):
+            train_loss = 0
+            for input, label in dataloader:
+                opt.zero_grad()
+                out = model(input)
+                loss = mse(out, label)
+                train_loss += loss
+                loss.backward()
+                opt.step()
+            train_loss = train_loss / len(dataloader)
+            if epoch % 10 == 0:
+                print(epoch, train_loss.item())
+                mlflow.log_metric(
+                    'train_loss',
+                    train_loss.item(), 
+                    epoch
+                )
+        params = list(parameters.values())
+        params_string = '_'.join([str(i) for i in params])
+        file = open('models/{}_{}.pt'.format(
+            type(model).__name__,
+            params_string
+        ), 'wb')
+        torch.save(model.state_dict(), file)
+```
+
+Now if we run the code, we should have a new folder called 'mlruns'. If we call a bash command in our folder
+
+```bash
+mlflow ui --port=5000
+```
+
+and open our browser at localhost:5000 - we should see a report about training one model.
+
+Next we'll need to add a function for trying different combinations for the model parameters and training the models. I other words, we should change this
+
+```python
+    parameters = {
+        "ch1": 2, 'ch2': 2, 'ch3': 2,
+        'pool1_size': 3, 'pool2_size': 2,
+        'ks1': 5, 'ks2': 7
+    }
+    model = models.LargeWin(parameters).to(device)
+    train_model(model, parameters, train_dataloader)
+```
+
+into this:
+
+```python
+    for ch1 in [2, 4]:
+        for ch2 in [2, 4]:
+            for ch3 in [2, 4]:
+                for pool1_size in [2, 3, 4, 8]:
+                    for pool2_size in [2, 3, 4, 8]:
+                        for ks1 in [5, 7]:
+                            for ks2 in [5, 7]:
+    # This code should run in the innermost loop
+    # I moved it all the way to the right for illustration
+    parameters = {
+        "ch1": ch1,
+        'ch2': ch2,
+        'ch3': ch3,
+        'pool1_size': pool1_size,
+        'pool2_size': pool2_size,
+        'ks1': ks1,
+        'ks2': ks2
+    }
+    model = models.LargeWin(parameters).to(device)
+    train_model(model, parameters, train_dataloader)
+```
+
+Also remember that our model can produce 'Crazy input' exceptions, so we need to try and catch those. At this point I'm going to split the code above into functions, so that it fits in size:
+
+```python
+    def run_train_model_large(ch1, ch2, ch3, 
+                        pool1_size, pool2_size, 
+                        ks1, ks2):
+        try:
+            parameters = {
+                "ch1": ch1,
+                'ch2': ch2,
+                'ch3': ch3,
+                'pool1_size': pool1_size,
+                'pool2_size': pool2_size,
+                'ks1': ks1,
+                'ks2': ks2
+            }
+            model = models.LargeWin(parameters).to(device)
+            train_model(model, parameters, train_dataloader)
+        except Exception as e:
+             print(e)
+
+    for ch1 in [2, 4]:
+        for ch2 in [2, 4]:
+            for ch3 in [2, 4]:
+                for pool1_size in [2, 3, 4, 8]:
+                    for pool2_size in [2, 3, 4, 8]:
+                        for ks1 in [5, 7]:
+                            for ks2 in [5, 7]:
+                                run_train_model_large(
+                                    ch1, ch2, ch3,
+                                    pool1_size,
+                                    pool2_size,
+                                    ks1, ks2
+                                )
+```
+
+If we run the script, after a while we should have a bunch of models exported, and mlflow tracker should indicate this activity. This means that all is going fine. We'll need to add similar script for the second model and we're ready to train real models. The code for the second model has additional ch4 and ks3 parameters, and doesn't have pooling sizes. Except these the code is identical:
+
+```python
+    def run_train_model_small(ch1, ch2, ch3, ch4,
+                        ks1, ks2, ks3):
+        try:
+            parameters = {
+                "ch1": ch1,
+                'ch2': ch2,
+                'ch3': ch3,
+                'ch4': ch4,
+                'ks1': ks1,
+                'ks2': ks2,
+                'ks3': ks3
+            }
+            model = models.SmallWin(parameters).to(device)
+            train_model(model, parameters, train_dataloader)
+        except Exception as e:
+             print(e)
+
+    for ch1 in [2, 4]:
+        for ch2 in [2, 4]:
+            for ch3 in [2, 4]:
+                for ch4 in [2, 4]:
+                    for ks1 in [3, 5]:
+                        for ks2 in [3, 5]:
+                            for ks3 in [3, 5]:
+                                run_train_model_small(
+                                    ch1, ch2, ch3, ch4,
+                                    ks1, ks2, ks3
+                                )
+```
+
+Here is the full code:
+
+```python
+import os
+import torch
+import mlflow
+import models
+import numpy as np
+from torch.utils.data import TensorDataset, DataLoader
+
+def train_model(model, parameters, dataloader):
+    opt = torch.optim.Adam(model.parameters())
+    mse = torch.nn.MSELoss()
+    with mlflow.start_run(run_name="OpenCircle"):
+        mlflow.log_param('model_type', type(model).__name__)
+        for key in parameters:
+            mlflow.log_param(key, parameters[key])
+        for epoch in range(51):
+            train_loss = 0
+            for input, label in dataloader:
+                opt.zero_grad()
+                out = model(input)
+                loss = mse(out, label)
+                train_loss += loss
+                loss.backward()
+                opt.step()
+            train_loss = train_loss / len(dataloader)
+            if epoch % 10 == 0:
+                print(epoch, train_loss.item())
+                mlflow.log_metric(
+                    'train_loss',
+                    train_loss.item(),
+                    epoch
+                )
+        params = list(parameters.values())
+        params_string = '_'.join([str(i) for i in params])
+        file = open('models/{}_{}.pt'.format(
+            type(model).__name__,
+            params_string
+        ), 'wb')
+        torch.save(model.state_dict(), file)
+
+if __name__ == '__main__':
+    device = torch.device('cuda:0'
+        if torch.cuda.is_available()
+        else 'cpu')
+    data = torch.tensor(np.load('images.npy'))
+    labels = torch.tensor(np.load('labels.npy'))
+    train_data = data.float().unsqueeze(1).to(device)
+    train_labels = labels.float().to(device)
+    train_dataset = TensorDataset(train_data, train_labels)
+    train_dataloader = DataLoader(train_dataset, 1024)
+    print(len(train_dataloader))
+
+    os.makedirs('models', exist_ok=True)
+
+    def run_train_model_large(ch1, ch2, ch3,
+                        pool1_size, pool2_size,
+                        ks1, ks2):
+        try:
+            parameters = {
+                "ch1": ch1,
+                'ch2': ch2,
+                'ch3': ch3,
+                'pool1_size': pool1_size,
+                'pool2_size': pool2_size,
+                'ks1': ks1,
+                'ks2': ks2
+            }
+            model = models.LargeWin(parameters).to(device)
+            train_model(model, parameters, train_dataloader)
+        except Exception as e:
+             print(e)
+
+    for ch1 in [2, 4]:
+        for ch2 in [2, 4]:
+            for ch3 in [2, 4]:
+                for pool1_size in [2, 3, 4, 8]:
+                    for pool2_size in [2, 3, 4, 8]:
+                        for ks1 in [5, 7]:
+                            for ks2 in [5, 7]:
+                                run_train_model_large(
+                                    ch1, ch2, ch3,
+                                    pool1_size,
+                                    pool2_size,
+                                    ks1, ks2
+                                )
+
+    def run_train_model_small(ch1, ch2, ch3, ch4,
+                        ks1, ks2, ks3):
+        try:
+            parameters = {
+                "ch1": ch1,
+                'ch2': ch2,
+                'ch3': ch3,
+                'ch4': ch4,
+                'ks1': ks1,
+                'ks2': ks2,
+                'ks3': ks3
+            }
+            model = models.SmallWin(parameters).to(device)
+            train_model(model, parameters, train_dataloader)
+        except Exception as e:
+             print(e)
+
+    for ch1 in [2, 4]:
+        for ch2 in [2, 4]:
+            for ch3 in [2, 4]:
+                for ch4 in [2, 4]:
+                    for ks1 in [3, 5]:
+                        for ks2 in [3, 5]:
+                            for ks3 in [3, 5]:
+                                run_train_model_small(
+                                    ch1, ch2, ch3, ch4,
+                                    ks1, ks2, ks3
+                                )
+```
+
+Run it for a small dataset with small number of epochs and make sure that the models are exported, the training is tracked by mlflow, and the script does not crash. If it's ok, generate a larger dataset (I use 256k examples) and run each model for larger number of epochs (I use 5000). It may take some time, the training on my machine takes a couple of weeks. After this is done, we'll be back to analyze the results.
+
+
+
+
 
 ## 4. Analysis
 
