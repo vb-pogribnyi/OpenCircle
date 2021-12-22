@@ -1580,11 +1580,108 @@ if __name__ == '__main__':
 
 Run it for a small dataset with small number of epochs and make sure that the models are exported, the training is tracked by mlflow, and the script does not crash. If it's ok, generate a larger dataset (I use 256k examples) and run each model for larger number of epochs (I use 5000). It may take some time, the training on my machine takes a couple of weeks. After this is done, we'll be back to analyze the results.
 
-
-
-
-
 ## 4. Analysis
+
+### 4.1 Evaluation
+
+After some models has been trained, we may want to see how they perform. So we will load the same (or maybe newly generated) dataset, and pass them one by one through a selected model. So the main function will look roughly the same as the one in the training script, but with minor changes:
+
+```python
+import os
+import torch
+import numpy as np
+import matplotlib.pyplot as plt
+from torch.utils.data import TensorDataset, DataLoader
+import models
+
+if __name__ == '__main__':
+    device = torch.device('cpu')
+    data = np.load('images.npy')
+    labels = np.load('labels.npy')
+    data = torch.tensor(data)\
+        .float().unsqueeze(1).to(device)
+    labels = torch.tensor(labels).float().to(device)
+    dataset = TensorDataset(data, labels)
+    dataloader = DataLoader(dataset, 1,  shuffle=True)
+
+    for f in os.scandir('models'):
+        print(f)
+        model = load_from_file(f)
+        eval_model(model, dataloader)
+```
+
+So basically we create a dataloader, then look at what models we have. Then one by one, we load these models and pass our dataloader through them. Now we need to implement the missing functions. We start with the one which will load a model from a file. It will look at the file name, and decide which class it is going to instantiate, as well as what parameters it will pass.
+
+```python
+def load_from_file(f):
+    name_parts = f.name.split('.')[0].split('_')
+    model_class_name = name_parts[0]
+    if model_class_name == 'LargeWin':
+        model_class = models.LargeWin
+    elif model_class_name == 'SmallWin':
+        model_class = models.SmallWin
+    if model_class_name == 'LargeWin':
+        parameters = {
+            "ch1": int(name_parts[1]),
+            'ch2': int(name_parts[2]),
+            'ch3': int(name_parts[3]),
+            'pool1_size': int(name_parts[4]),
+            'pool2_size': int(name_parts[5]),
+            'ks1': int(name_parts[6]),
+            'ks2': int(name_parts[7])
+        }
+    else:
+        parameters = {
+            "ch1": int(name_parts[1]),
+            'ch2': int(name_parts[2]),
+            'ch3': int(name_parts[3]),
+            'ch4': int(name_parts[4]),
+            'ks1': int(name_parts[5]),
+            'ks2': int(name_parts[6]),
+            'ks3': int(name_parts[7])
+        }
+    model = model_class(parameters)
+    model.load_state_dict(torch.load(
+        open(f.path, 'rb'),
+        map_location='cpu'
+    ))
+
+    return model
+```
+
+The second function will iterate through the dataloader, pass each image through the model, then plot the image itself along with the model output:
+
+```python
+def eval_model(model, dataloader):
+    for input, label in dataloader:
+        out = model(input)
+
+        # Remove example and channels dimension
+        img = input.squeeze(0).squeeze(0).detach().numpy()
+        out = out[0].detach().numpy()
+        pred_sin = out[0]
+        pred_cos = out[1]
+
+        # Plot the input
+        plt.subplot(2, 1, 1)
+        plt.pcolor(img, cmap='Wistia')
+
+        # Plot the output
+        plt.subplot(2, 1, 2)
+        plt.plot([-1, 1], [pred_sin, pred_sin])
+        plt.plot([pred_cos, pred_cos], [-1, 1])
+        plt.gca().set_xticks([-1, 0, 1])
+        plt.gca().set_yticks([-1, 0, 1])
+        plt.grid()
+        plt.gcf().set_size_inches(3, 6)
+        plt.show()
+```
+
+Note that we are plotting the output as lines, corresponding to sin and cos prediction. By looking at the image we can decide if the model performs good enough:
+
+![01_eval](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\01_eval.png)
+
+By doing this we can visually understand what does the final loss mean. If we have RMSE 0.12 after training, is it good or bad. Or to judge if the model predicts wrong really noisy images, or is bad in general. Ultimately, to see if it work at all. 
 
 ### 4.1 Dense layer
 
