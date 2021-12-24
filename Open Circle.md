@@ -1683,6 +1683,96 @@ Note that we are plotting the output as lines, corresponding to sin and cos pred
 
 By doing this we can visually understand what does the final loss mean. If we have RMSE 0.12 after training, is it good or bad. Or to judge if the model predicts wrong really noisy images, or is bad in general. Ultimately, to see if it work at all. 
 
+### 4.2 Performance statistics
+
+Now that we have trained a bunch of models, we can see which parameters improve the model performance. To do that, we will find correlation scores between the loss at the end of the training and the model parameters (filters number and pooling size).
+
+To start with, let's download the mlflow logs. In the mlflow web app, click "download csv" and save in the project directory:
+
+![runs](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\runs.png)
+
+Now we need to load the file in python with pandas:
+
+```python
+import pandas as pd
+
+data = pd.read_csv("runs.csv")
+data = data[[
+    'model_type',
+    'Status',
+    'ch1', 'ch2', 'ch3',
+    'ks1', 'ks2',
+    'pool1_size', 'pool2_size'
+]]
+print(data.shape)
+```
+
+Note that we do not need all the columns, so we list the ones that will be useful. Now let's filter only one model to analyze (LargeWin, to start with) and the models that have not failed (whose status is 'finished'):
+
+```python
+data = data[data['Status'] == 'FINISHED']
+data = data[data['model_type'] == 'LargeWin']
+print(data.shape)
+```
+
+And finally, calculate the correlations:
+
+```python
+print(data.corr(method='pearson')['train_loss'])
+```
+
+Which gives the following output (for me)
+
+```
+train_loss    1.000000
+ch1          -0.390550
+ch2          -0.252477
+ch3          -0.031024
+ks1          -0.430135
+ks2           0.114280
+pool1_size   -0.407319
+pool2_size    0.133425
+```
+
+This tells us that the larger pool1_size, for example, we use - the smaller will be the loss. But if we take large pool2_size - the loss tend to be larger. Let's make a couple of plots:
+
+```python
+import matplotlib.pyplot as plt
+
+plt.scatter(data['pool1_size'], data['train_loss'], 
+            label="Pool1", alpha=0.2)
+plt.scatter(data['ks2'], data['train_loss'], 
+            label="Ks2", alpha=0.2)
+plt.legend()
+plt.show()
+```
+
+This will give an image like this:
+
+![corr](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\corr.png)
+
+We see that the model on average performs better with smaller ks2, but the best result was obtained with a large ks2, which is interesting.
+
+After this result is obtained, I will select the models I want to keep. I will modify the training script, the part in which we test different parameter sets:
+
+```python
+    for ch1 in [4]:
+        for ch2 in [2, 4]:
+            for ch3 in [2]:
+                for pool1_size in [3, 4]:
+                    for pool2_size in [2]:
+                        for ks1 in [7]:
+                            for ks2 in [5, 7]:
+                                run_train_model_large(
+                                    ch1, ch2, ch3,
+                                    pool1_size,
+                                    pool2_size,
+                                    ks1, ks2
+                                )
+```
+
+The same procedure will be repeated for the second model, and we'll move on to analyzing the trained weights.
+
 ### 4.1 Dense layer
 
 The best result is obtained with 4-2-2 dense network architecture. 
