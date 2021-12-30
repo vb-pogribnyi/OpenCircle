@@ -1773,6 +1773,250 @@ After this result is obtained, I will select the models I want to keep. I will m
 
 The same procedure will be repeated for the second model, and we'll move on to analyzing the trained weights.
 
+### 4.3 Convolution filters
+
+Now that we know that our models are working, let's find out how do they work. We will start with the initial layers, which are convolutions. To analyze their work we will write a script that shows every filter and the model output after each convolution layer. Apart from a plotting tool, we will need to make changes to the models script. First, we have to enable intermediate output, if we want to see it. Second, our load_from_file() function we used earlier for evaluation, will be needed here as well, so I will move it to the models file.
+
+To enable the model's intermediate output, we will add a new parameter to its forward() function. Then inside the function, we check the parameter for early output:
+
+```python
+    def forward(self, x, out_layer=-1):
+        x = self.conv1(x)
+        if out_layer == 0:
+            return x
+        x = self.pool1(x)
+        x = torch.tanh(x)
+
+        x = self.conv2(x)
+        if out_layer == 1:
+            return x
+        x = self.pool2(x)
+        x = torch.tanh(x)
+
+        x = x.reshape([x.shape[0], -1])
+        x = self.dense1(x)
+        x = torch.tanh(x)
+        x = self.dense2(x)
+
+        return torch.tanh(x)
+```
+
+I repeat the procedure for the SmallWin model. The operation is same, except it has 3 convolution layers, so it has three checks. 
+
+Now we may return to the plotting script and sketch its skeleton:
+
+```python
+import os
+import torch
+import numpy as np
+import matplotlib.pyplot as plt
+from generate_dataset import generate_image
+import models
+
+np.random.seed(42)
+
+img, lbl = generate_image()
+t_img = torch.tensor(img).float() \
+    .unsqueeze(0).unsqueeze(0)
+for f in os.scandir('models'):
+    print(f)
+    model = models.load_from_file(f)
+    out = model(t_img).detach().reshape(-1).numpy()
+
+    print(out)
+    print(lbl)
+    plt.pcolor(img, cmap='Wistia')
+    plt.show()
+
+    show_weight(model.conv1.weight, model(t_img, 0)[0])
+    show_weight(model.conv2.weight, model(t_img, 1)[0])
+```
+
+Here we are generating an image (setting a seed for random, so that the image is same), loading a model, passing the image through the model, and plotting the information. The source image for all the illustrations below looks like this:
+
+![src](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\src.png)
+
+The show_weight() function, which we will write shortly, accepts as arguments the weight to plot and the model output after the weight is applied. It contains some plotting commands along with some logic to arrange the images:
+
+```python
+def show_weight(weight, output):
+    plot_cnt = 1
+    img_width = weight.shape[0]
+    img_height = weight.shape[1]
+    img_height += 1  # The outputs row
+
+    # Plot weights
+    for i in range(weight.shape[1]):
+        for j in range(weight.shape[0]):
+            filter = weight[j, i].detach().numpy()
+            plt.subplot(img_height, img_width, plot_cnt)
+            plt.pcolor(filter, cmap='Wistia')
+            plot_cnt += 1
+
+    # Plot outputs - at the bottom
+    for j in range(weight.shape[0]):
+        plt.subplot(img_height, img_width, plot_cnt)
+        out_img = output[j].detach().numpy()
+        plt.pcolor(out_img, cmap='Wistia')
+        plot_cnt += 1
+
+    plt.tight_layout(0.1, 0.1, 0.1)
+    plt.gcf().set_size_inches(img_width * 2, img_height * 2)
+    plt.show()
+```
+
+If we run the script, we'll be getting images like these:
+
+![filters_1](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filters_1.png)
+
+![filters_2](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filters_2.png)
+
+These are the first two layer of one model. The last row shows the output of the layer, while the first rows show the filters applied to the previous layer output. For the first layer we see some kind of pattern for filter, and some sort of processing for the image. But for the second filter, both filter weights and output look like complete noise, which is a sign of overfitting. To deal with this, we may use some regularization technique, like L2 regularization. In PyTorch, we need to add a weight_decay parameter for optimizer:
+
+```python
+opt = torch.optim.Adam(model.parameters())
+# Change to:
+opt = torch.optim.Adam(
+    model.parameters(), 
+    weight_decay=1e-2
+)
+```
+
+After that, we need to train our models again. Luckily, we have found which parameters correlate most with the loss, so this training will take much less time. I have created other training script, similar to the first one, but included all the changes so far:
+
+```python
+import os
+import torch
+import mlflow
+import models
+import numpy as np
+from torch.utils.data import TensorDataset, DataLoader
+
+def train_model(model, parameters, dataloader):
+    opt = torch.optim.Adam(
+        model.parameters(),
+        weight_decay=1e-2
+    )
+    mse = torch.nn.MSELoss()
+    with mlflow.start_run(run_name="OpenCircleWD"):
+        mlflow.log_param('model_type', type(model).__name__)
+        for key in parameters:
+            mlflow.log_param(key, parameters[key])
+        for epoch in range(5001):
+            train_loss = 0
+            for input, label in dataloader:
+                opt.zero_grad()
+                out = model(input)
+                loss = mse(out, label)
+                train_loss += loss
+                loss.backward()
+                opt.step()
+            train_loss = train_loss / len(dataloader)
+            if epoch % 10 == 0:
+                print(epoch, train_loss.item())
+                mlflow.log_metric(
+                    'train_loss',
+                    train_loss.item(),
+                    epoch
+                )
+        params = list(parameters.values())
+        params_string = '_'.join([str(i) for i in params])
+        file = open('models/{}_{}_wd.pt'.format(
+            type(model).__name__,
+            params_string
+        ), 'wb')
+        torch.save(model.state_dict(), file)
+
+if __name__ == '__main__':
+    device = torch.device('cuda:0'
+        if torch.cuda.is_available()
+        else 'cpu')
+    data = torch.tensor(np.load('images.npy'))
+    labels = torch.tensor(np.load('labels.npy'))
+    train_data = data.float().unsqueeze(1).to(device)
+    train_labels = labels.float().to(device)
+    train_dataset = TensorDataset(train_data, train_labels)
+    train_dataloader = DataLoader(train_dataset, 1024)
+    print(len(train_dataloader))
+
+    os.makedirs('models', exist_ok=True)
+
+    def run_train_model_large(ch1, ch2, ch3,
+                        pool1_size, pool2_size,
+                        ks1, ks2):
+        try:
+            parameters = {
+                "ch1": ch1,
+                'ch2': ch2,
+                'ch3': ch3,
+                'pool1_size': pool1_size,
+                'pool2_size': pool2_size,
+                'ks1': ks1,
+                'ks2': ks2
+            }
+            model = models.LargeWin(parameters).to(device)
+            train_model(model, parameters, train_dataloader)
+        except Exception as e:
+             print(e)
+
+    for ch1 in [4]:
+        for ch2 in [2, 4]:
+            for ch3 in [2]:
+                for pool1_size in [3, 4]:
+                    for pool2_size in [2]:
+                        for ks1 in [7]:
+                            for ks2 in [5, 7]:
+                                run_train_model_large(
+                                    ch1, ch2, ch3,
+                                    pool1_size,
+                                    pool2_size,
+                                    ks1, ks2
+                                )
+
+    def run_train_model_small(ch1, ch2, ch3, ch4,
+                        ks1, ks2, ks3):
+        try:
+            parameters = {
+                "ch1": ch1,
+                'ch2': ch2,
+                'ch3': ch3,
+                'ch4': ch4,
+                'ks1': ks1,
+                'ks2': ks2,
+                'ks3': ks3
+            }
+            model = models.SmallWin(parameters).to(device)
+            train_model(model, parameters, train_dataloader)
+        except Exception as e:
+             print(e)
+
+    for ch1 in [4]:
+        for ch2 in [4]:
+            for ch3 in [2, 4]:
+                for ch4 in [2, 4]:
+                    for ks1 in [3]:
+                        for ks2 in [3, 5]:
+                            for ks3 in [5]:
+                                run_train_model_small(
+                                    ch1, ch2, ch3, ch4,
+                                    ks1, ks2, ks3
+                                )
+```
+
+After a while, we get another set of trained models. For me, if I visualize the weights, it looks something like this:
+
+![filters_21](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filters_21.png)
+
+![filters_31](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filters_31.png)
+
+These are the samples from the first layer of different models. Here is what the second layer look like:
+
+![filters_22](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filters_22.png)
+
+![filters_32](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filters_32.png)
+
+This looks much better. All the filters are symmetric, and the pattern (distribution of lighter and darker parts) is clear. We can move on to figuring out how it actually works.
+
 ### 4.1 Dense layer
 
 The best result is obtained with 4-2-2 dense network architecture. 

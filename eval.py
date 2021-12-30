@@ -5,40 +5,6 @@ import matplotlib.pyplot as plt
 from torch.utils.data import TensorDataset, DataLoader
 import models
 
-def load_from_file(f):
-    name_parts = f.name.split('.')[0].split('_')
-    model_class_name = name_parts[0]
-    if model_class_name == 'LargeWin':
-        model_class = models.LargeWin
-    elif model_class_name == 'SmallWin':
-        model_class = models.SmallWin
-    if model_class_name == 'LargeWin':
-        parameters = {
-            "ch1": int(name_parts[1]),
-            'ch2': int(name_parts[2]),
-            'ch3': int(name_parts[3]),
-            'pool1_size': int(name_parts[4]),
-            'pool2_size': int(name_parts[5]),
-            'ks1': int(name_parts[6]),
-            'ks2': int(name_parts[7])
-        }
-    else:
-        parameters = {
-            "ch1": int(name_parts[1]),
-            'ch2': int(name_parts[2]),
-            'ch3': int(name_parts[3]),
-            'ch4': int(name_parts[4]),
-            'ks1': int(name_parts[5]),
-            'ks2': int(name_parts[6]),
-            'ks3': int(name_parts[7])
-        }
-    model = model_class(parameters)
-    model.load_state_dict(torch.load(
-        open(f.path, 'rb'),
-        map_location='cpu'
-    ))
-
-    return model
 
 def eval_model(model, dataloader):
     for input, label in dataloader:
@@ -76,5 +42,5 @@ if __name__ == '__main__':
 
     for f in os.scandir('models'):
         print(f)
-        model = load_from_file(f)
+        model = models.load_from_file(f)
         eval_model(model, dataloader)

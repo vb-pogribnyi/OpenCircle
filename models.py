@@ -23,12 +23,16 @@ class LargeWin(torch.nn.Module):
         self.pool1 = torch.nn.AvgPool2d(pool1_size)
         self.pool2 = torch.nn.AvgPool2d(pool2_size)
 
-    def forward(self, x):
+    def forward(self, x, out_layer=-1):
         x = self.conv1(x)
+        if out_layer == 0:
+            return x
         x = self.pool1(x)
         x = torch.tanh(x)
 
         x = self.conv2(x)
+        if out_layer == 1:
+            return x
         x = self.pool2(x)
         x = torch.tanh(x)
 
@@ -62,16 +66,22 @@ class SmallWin(torch.nn.Module):
         self.dense2 = torch.nn.Linear(ch4, 2)
         self.pool = torch.nn.AvgPool2d(pool_size)
 
-    def forward(self, x):
+    def forward(self, x, out_layer=-1):
         x = self.conv1(x)
+        if out_layer == 0:
+            return x
         x = self.pool(x)
         x = torch.tanh(x)
 
         x = self.conv2(x)
+        if out_layer == 1:
+            return x
         x = self.pool(x)
         x = torch.tanh(x)
 
         x = self.conv3(x)
+        if out_layer == 2:
+            return x
         x = self.pool(x)
         x = torch.tanh(x)
 
@@ -81,6 +91,41 @@ class SmallWin(torch.nn.Module):
         x = self.dense2(x)
 
         return torch.tanh(x)
+
+def load_from_file(f):
+    name_parts = f.name.split('.')[0].split('_')
+    model_class_name = name_parts[0]
+    if model_class_name == 'LargeWin':
+        model_class = LargeWin
+    elif model_class_name == 'SmallWin':
+        model_class = SmallWin
+    if model_class_name == 'LargeWin':
+        parameters = {
+            "ch1": int(name_parts[1]),
+            'ch2': int(name_parts[2]),
+            'ch3': int(name_parts[3]),
+            'pool1_size': int(name_parts[4]),
+            'pool2_size': int(name_parts[5]),
+            'ks1': int(name_parts[6]),
+            'ks2': int(name_parts[7])
+        }
+    else:
+        parameters = {
+            "ch1": int(name_parts[1]),
+            'ch2': int(name_parts[2]),
+            'ch3': int(name_parts[3]),
+            'ch4': int(name_parts[4]),
+            'ks1': int(name_parts[5]),
+            'ks2': int(name_parts[6]),
+            'ks3': int(name_parts[7])
+        }
+    model = model_class(parameters)
+    model.load_state_dict(torch.load(
+        open(f.path, 'rb'),
+        map_location='cpu'
+    ))
+
+    return model
 
 if __name__ == '__main__':
     img, label = generate_image()

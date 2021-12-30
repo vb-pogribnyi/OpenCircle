@@ -6,13 +6,16 @@ import numpy as np
 from torch.utils.data import TensorDataset, DataLoader
 
 def train_model(model, parameters, dataloader):
-    opt = torch.optim.Adam(model.parameters())
+    opt = torch.optim.Adam(
+        model.parameters(),
+        weight_decay=1e-2
+    )
     mse = torch.nn.MSELoss()
-    with mlflow.start_run(run_name="OpenCircle"):
+    with mlflow.start_run(run_name="OpenCircleWD"):
         mlflow.log_param('model_type', type(model).__name__)
         for key in parameters:
             mlflow.log_param(key, parameters[key])
-        for epoch in range(51):
+        for epoch in range(5001):
             train_loss = 0
             for input, label in dataloader:
                 opt.zero_grad()
@@ -31,7 +34,7 @@ def train_model(model, parameters, dataloader):
                 )
         params = list(parameters.values())
         params_string = '_'.join([str(i) for i in params])
-        file = open('models/{}_{}.pt'.format(
+        file = open('models/{}_{}_wd.pt'.format(
             type(model).__name__,
             params_string
         ), 'wb')
@@ -100,13 +103,13 @@ if __name__ == '__main__':
         except Exception as e:
              print(e)
 
-    for ch1 in [2, 4]:
-        for ch2 in [2, 4]:
+    for ch1 in [4]:
+        for ch2 in [4]:
             for ch3 in [2, 4]:
                 for ch4 in [2, 4]:
-                    for ks1 in [3, 5]:
+                    for ks1 in [3]:
                         for ks2 in [3, 5]:
-                            for ks3 in [3, 5]:
+                            for ks3 in [5]:
                                 run_train_model_small(
                                     ch1, ch2, ch3, ch4,
                                     ks1, ks2, ks3
