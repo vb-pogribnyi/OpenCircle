@@ -25,15 +25,19 @@ class LargeWin(torch.nn.Module):
 
     def forward(self, x, out_layer=-1):
         x = self.conv1(x)
-        if out_layer == 0:
+        if out_layer == 11:
             return x
         x = self.pool1(x)
         x = torch.tanh(x)
+        if out_layer == 12:
+            return x
 
         x = self.conv2(x)
-        if out_layer == 1:
+        if out_layer == 21:
             return x
         x = self.pool2(x)
+        if out_layer == 22:
+            return x
         x = torch.tanh(x)
 
         x = x.reshape([x.shape[0], -1])

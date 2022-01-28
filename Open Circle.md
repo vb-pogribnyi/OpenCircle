@@ -2061,3 +2061,252 @@ Note that here I'm setting that model weights for which I want to print the data
 ![dense_2](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\dense_2.png)
 
 The red-ish colors here mean values closer to -1, the yellow-ish +1. Let's take a look at the bottom (cos) image. If the inputs to the network were (-1, 1), top left corner, the output would be -1. If the inputs were (+1, -1) - we would appear in the bottom right corner and output +1. For input like (+1, +1) - the network would output a small value close to 0. The same considerations are applicable for the top plot, of course.
+
+### 4.5 Values from inside
+
+Okay, we want to figure out what is going on inside the network. A part of this is getting values at the intermediate layers. For example, we want to see an image before convolution, after it, and the same image after pooling. This is relatively straightforward, we only need to add a parameter to our forward() function of the model, but I wanted to make it a separate point, so that it doesn't mix up with everything else.
+
+So here it is. We take our model, add a parameter to the forward() method, and output a value at different stage, depending on the value:
+
+```python
+    def forward(self, x, out_layer=-1):
+        x = self.conv1(x)
+        if out_layer == 11:
+            return x
+        x = self.pool1(x)
+        x = torch.tanh(x)
+        if out_layer == 12:
+            return x
+
+        x = self.conv2(x)
+        if out_layer == 21:
+            return x
+        x = self.pool2(x)
+        if out_layer == 22:
+            return x
+        x = torch.tanh(x)
+
+        x = x.reshape([x.shape[0], -1])
+        x = self.dense1(x)
+        x = torch.tanh(x)
+        x = self.dense2(x)
+
+        return torch.tanh(x)
+```
+
+The default value for the parameter is something invalid, so that the model works from the beginning to the end, unless specified otherwise.
+
+### 4.6 All together
+
+To gain an understanding of how the network performs its classification, let's take an example and try to find what led the network to such result.
+
+So, say our network outputs a "90°" prediction for an image. For that, the cos output should be close to "+1", the sin output - to "0". Take a look again at the dense network plots above. We get such result when the convolutions output is close to (-1, +1). Next we look at the convolution filters, and try to find when they output such values. Here are again the filters for this particular dense network:
+
+![filters_22](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filters_22.png)
+
+So to get the output described above, the left set of filters has to output "-1", the left ones - "+1". Remember that the filters are designed to work in chain:
+
+![filter_chain](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filter_chain.png)
+
+I think we can improve the understanding of filter operation by example. I wrote a script that illustrates how an actual filter is applied (in this example - filter 2 applied to the "filtered image", because it take less space).
+
+First of all, the script will draw similar images as above, but it will also have a number ontop of every pixel, so that we can see actual value. Second, it will show each sub-image, multiplied by the filter. This should help to gain understanding of the process.
+
+We start with a function which draws an image with numerical values. To test it, we print our input image. But since the image has  too many pixels, the text ontop merges and we see nothing. So I plotted a fraction of this image nearby:
+
+```python
+import numpy as np
+from generate_dataset import generate_image
+import matplotlib.pyplot as plt
+
+
+
+def show_matrix(arr, ax, title='', text=None):
+    arr = arr[::-1]
+    ax.set_title(title)
+    ax.matshow(arr, cmap='Wistia')
+    for i in range(arr.shape[0]):
+        for j in range(arr.shape[1]):
+            if text is None:
+                ax.text(j, i, str(round(arr[i, j], 2)), 
+                        va='center', ha='center')
+            else:
+                ax.text(j, i, text, 
+                        va='center', ha='center')
+    ax.set_axis_off()
+
+    return ax
+
+# Setting a seed, so that we generate the same image
+np.random.seed(42)
+img, lbl = generate_image()
+
+fig, ax = plt.subplots(1, 2)
+show_matrix(img, ax[0])
+show_matrix(img[5:15, 5:15], ax[1])
+plt.show()
+```
+
+The code should produce the following image:
+
+![numerical_input](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\numerical_input.png)
+
+The image is the same input as on the previous plot. The right image is a zoomed-in version of the left one.
+
+Next we add a function that shows some analysis. It will show a text description, such as filter 'in' and 'out' indices, so that the whole image makes sense later. Then it will show our input image and the filter we're applying. After that it will illustrate the convolution process itself, we'll get to it. We will have 9 images overall, organized in a 3x3 grid. Let's start by showing description, input and filter.
+
+```python
+def illustrate(model, img, filter_in_idx, filter_out_idx):
+    filter = model.conv2 \
+        .weight[filter_out_idx, filter_in_idx] \
+        .detach().numpy()
+
+    fig, ax = plt.subplots(3, 3)
+    description = f"Filter in idx: {filter_in_idx} \n " \
+                  f"Filter out idx: {filter_out_idx} \n "
+    show_matrix(np.array([[0]]), ax[0, 0], "", description)
+    show_matrix(filter, ax[0, 2], "Filter")
+    fig.set_size_inches(10, 10)
+    plt.tight_layout()
+    plt.show()
+```
+
+Now we only have to call this function with our selected model, and set filter indexes to display. Here's how I did that:
+
+```python
+for filter_out_idx in [0, 1]:
+    for filter_in_idx in [0, 1, 2, 3]:
+        for f in os.scandir('models'):
+            if f.name != 'LargeWin_4_2_2_3_2_7_7_wd.pt':
+                continue
+            print(f)
+            model = models.load_from_file(f)
+            illustrate(
+                model, img, 
+                filter_in_idx, filter_out_idx
+            )
+```
+
+This code should show a plot with two images, nothing too fancy. Let's add actual images from inside the network. I will add the output image from the previous layer (call it "Original"), the input to the convolution (called "Src"), and the output image ("Output"). Here's the code:
+
+```python
+def illustrate(model, img, filter_in_idx, filter_out_idx):
+    filter = model.conv2 \
+        .weight[filter_out_idx, filter_in_idx] \
+        .detach().numpy()
+    img_t = torch.tensor(img).unsqueeze(0).unsqueeze(0).float()
+
+    img_orig = model(
+        img_t, 
+        out_layer=11
+    )[0, filter_in_idx].detach().numpy()
+    layer_in = model(
+        img_t, 
+        out_layer=12
+    )[0, filter_in_idx].detach().numpy()
+    out_nopool = model(
+        img_t, 
+        out_layer=21
+    )[0, filter_out_idx].detach().numpy()
+
+    fig, ax = plt.subplots(3, 3)
+    description = f"Filter in idx: {filter_in_idx} \n " \
+                  f"Filter out idx: {filter_out_idx} \n "
+    show_matrix(np.array([[0]]), ax[0, 0], "", description)
+    show_matrix(filter, ax[0, 2], "Filter")
+    show_matrix(img_orig, ax[1, 0], "Original", '')
+    show_matrix(out_nopool, ax[2, 0], "Output")
+    show_matrix(layer_in, ax[0, 1], "Src")
+    fig.set_size_inches(10, 10)
+    plt.tight_layout()
+    plt.show()
+```
+
+Note that I've added an empty string as a text field for the Original image, so that the number are not written. This would overwhelm the image.
+
+Now it's time to add the convolution function. It will accept an image and a filter, like regular convolution. It will split the image input pieces sized same as the filter (7x7 in our case), and multiply by the filter. 
+
+```python
+def convolve(arr, filter):
+    shifts_x = arr.shape[0] - filter.shape[0] + 1
+    shifts_y = arr.shape[1] - filter.shape[1] + 1
+    result = []
+    for i in range(shifts_x):
+        conv_row = []
+        for j in range(shifts_y):
+            conv_item = arr[
+                        i:i + filter.shape[0], 
+                        j:j + filter.shape[1]
+                        ]
+            conv_row.append(conv_item * filter)
+        result.append(conv_row)
+    return result
+```
+
+Since the second layer input is 8x8, the filter will be applied to 4 sub-images, and the function will return an array 2x2. Note that 'conv_item * filter' will return a matrix where every element of conv_item is multiplied by respective element of filter.
+
+When the function is ready, we may plot its values in 'illustrate()':
+
+```python
+def illustrate(model, img, filter_in_idx, filter_out_idx):
+    filter = model.conv2 \
+        .weight[filter_out_idx, filter_in_idx] \
+        .detach().numpy()
+    img_t = torch.tensor(img).unsqueeze(0).unsqueeze(0).float()
+
+    img_orig = model(
+        img_t,
+        out_layer=11
+    )[0, filter_in_idx].detach().numpy()
+    layer_in = model(
+        img_t,
+        out_layer=12
+    )[0, filter_in_idx].detach().numpy()
+    out_nopool = model(
+        img_t,
+        out_layer=21
+    )[0, filter_out_idx].detach().numpy()
+    conv = convolve(layer_in, filter)
+
+    fig, ax = plt.subplots(3, 3)
+    description = f"Filter in idx: {filter_in_idx} \n " \
+                  f"Filter out idx: {filter_out_idx} \n "
+    show_matrix(np.array([[0]]), ax[0, 0], "", description)
+    show_matrix(filter, ax[0, 2], "Filter")
+    show_matrix(img_orig, ax[1, 0], "Original", '')
+    show_matrix(out_nopool, ax[2, 0], "Output")
+    show_matrix(layer_in, ax[0, 1], "Src")
+    show_matrix(conv[1][0], ax[1, 1], "Out 1")
+    show_matrix(conv[1][1], ax[1, 2], "Out 2")
+    show_matrix(conv[0][0], ax[2, 1], "Out 3")
+    show_matrix(conv[0][1], ax[2, 2], "Out 4")
+    fig.set_size_inches(10, 10)
+    plt.tight_layout()
+    plt.show()
+```
+
+The code will output something like this:
+
+![filters_num_1](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filters_n_1.png)
+
+So, what the network does, is fairly straightforward, it just has lot of images. Let's have a closer look at the image above. "Src" is "Original" after pooling and nonlinearity. Each of "Out X" images are parts of the "Src":
+
+![filters_num_1_marks](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filters_n_1_marks.png)
+
+Interpretation of the number themselves is also straightforward: These are only multiplications of these image parts by the filter values:
+
+![filters_n_1_nums](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filters_n_1_nums.png)
+
+However, you may want to take a second to figure out which number goes where (use the previous plot for reference).
+
+Let's think about what we see here. First of all, the filter zeroes out most of the values in the middle, leaving mostly top right and bottom left. This means that these top right and bottom left parts of the image actually affect the filter output, obviously. Second is, this filter "likes" when the top right values are negative and bottom left are positive. In this case the filter outputs larger value. If our image had positive values both at the top right and bottom left - they would cancel out, which means that the filter wouldn't care about them (remember that after the filter is applied, its outputs will sum up).
+
+The output of this filter will sum up with the outputs of other filters, to form the "Output" matrix. Let's look at another filter operation:
+
+![filters_num_2](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filters_num_2.png)
+
+This filter also does not pay much attention to center pixels, mostly edge pixels affect its output. For our example, when the image is open at 150-ish degrees, its right and bottom edges are darker, compared to the bottom and right, so such filter would output something rather negative.
+
+Now assume we understand how the "Output" matrix is formed (there is such matrix for every 'filter_out_idx'). The average value of this matrix would be the first input to our dense network. If we remind ourselves of how the dense network work, we may connect the filters output to the "Grand output" - output of the whole network. So, if all the filters output a positive value, the network tend to output "Large Sin, zero Cos". If some filters output positive value, others negative, in such manner that they compensate each other - the network will output zero for both Sin and Cos, which should never happen, theoretically.
+
+ 
