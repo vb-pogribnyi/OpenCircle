@@ -2313,7 +2313,7 @@ Now assume we understand how the "Output" matrix is formed (there is such matrix
 
 Any ML model is useless without application to a real application (or real data). Usefulness of this particular model is still questionable, but it's still nice to know that it works for the real data.
 
-### 5.1 Data
+### 5.1 Evaluation
 
 To collect the data for testing, I draw a couple of open circles on a paper and took a photo of it:
 
@@ -2405,3 +2405,38 @@ While running the code, it failed right away for me:
 ![im_02_pred](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\05_real\im_02_pred.png)
 
 It predicts completely wrong direction (which is by the way not the case for all the images). So we have a chance to investigate this case.
+
+### 5.2 Investigation
+
+The easiest part to start is to take a look at the output of the second convolution layer, through the tool we made previously. I only had to replace the part which generates a random image with the code that reads actual image:
+
+```python
+# np.random.seed(42)
+# img, lbl = generate_image()
+img = cv.imread('data_real/01.png', cv.IMREAD_GRAYSCALE)
+img_size = np.min(img.shape)
+img = img[:img_size, :img_size]
+img = img.astype(float)
+img = cv.resize(img, (30, 30))
+img = img - np.min(img)
+img = img / np.max(img)
+img = 1 - img
+```
+
+After running the code, got the following result:
+
+![03_filt_num](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\05_real\03_filt_num.png)
+
+After some thinking and reminding myself how this system should work, I figured out the source of the problem:
+
+![03_filt_num_scheme](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\05_real\03_filt_num_scheme.png)
+
+The image is contained mostly in the central pixels, but the filter used edge pixels to make the decision. So the easy fix was to cut the real image even more, so that edge pixels after convolution would contain information:
+
+![01_c](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\05_real\01_c.png)
+
+The evaluation code gave much better result this time:
+
+![im_02_pred_c](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\05_real\im_02_pred_c.png)
+
+But easy solution is a bit boring, isn't it? A much better solution would be to make the filter care about the center pixels. To do so, we might include this case into the training set (by which I mean to include smaller circles shifted to a side of the image). After training the network, we may hope that our real images will be recognized more easily.
