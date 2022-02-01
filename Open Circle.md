@@ -2440,3 +2440,85 @@ The evaluation code gave much better result this time:
 ![im_02_pred_c](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\05_real\im_02_pred_c.png)
 
 But easy solution is a bit boring, isn't it? A much better solution would be to make the filter care about the center pixels. To do so, we might include this case into the training set (by which I mean to include smaller circles shifted to a side of the image). After training the network, we may hope that our real images will be recognized more easily.
+
+### 5.6 The fix
+
+So, the plan is to shift the image. But we don't want to shift it too much, so that the point at which the circle is open would remain on the image. Otherwise the network simply will not train. So we want to shift the image only if it is small enough. 
+
+The part I will be changing is the generate_image() function. The part where the image is being scaled:
+
+```python
+    scale_x = np.random.uniform(0.5, 1.1)
+    scale_y = np.random.uniform(0.5, 1.1)
+```
+
+I will add it a chance to scale even further, say up to 0.2 times original size:
+
+```python
+    scale_x = np.random.uniform(0.2, 1.1)
+    scale_y = np.random.uniform(0.2, 1.1)
+```
+
+After that, I will decide how much I want to shift it:
+
+```python
+    shift_x, shift_y = 0, 0
+    shift_thresh = 0.5
+    if scale_x < shift_thresh:
+        shift_x = np.random.uniform(
+            -shift_thresh + scale_x, 
+            shift_thresh - scale_x
+        )
+    if scale_y < shift_thresh:
+        shift_y = np.random.uniform(
+            -shift_thresh + scale_y, 
+            shift_thresh - scale_y
+        )
+```
+
+Here I initialize the shift value to zero, then if my image is scaled to less than 0.5 times - I will change the shift values. The magnitude of this change will be maximum shift_thresh - scale_y, at both sides. This will ensure that the whole information stays inside the image.
+
+Now we have to apply this shift. Here we have to note that there is a rotation transform, and the shift has to be applied after the rotation. Otherwise the image will be rotated not around the center of the circle (but around the center of the image, which is away from the circle). 
+
+So, here's what the new function looks like:
+
+```python
+def generate_image():
+    n_circle_pts = 350
+
+    # Parameters randomization
+    angle = np.random.uniform(0, 360)
+    open_percent = np.random.uniform(10, 40)
+    circle_p1 = np.random.uniform(0.7, 1.)
+    circle_p2 = np.random.uniform(0.7, 1.)
+    scale_x = np.random.uniform(0.2, 1.1)
+    scale_y = np.random.uniform(0.2, 1.1)
+    shift_x, shift_y = 0, 0
+    shift_thresh = 0.5
+    if scale_x < shift_thresh:
+        shift_x = np.random.uniform(
+            -shift_thresh + scale_x,
+            shift_thresh - scale_x
+        )
+    if scale_y < shift_thresh:
+        shift_y = np.random.uniform(
+            -shift_thresh + scale_y,
+            shift_thresh - scale_y
+        )
+
+    n_pts_skip = int(n_circle_pts / 100 * open_percent)
+    angle_rad = angle / 180 * np.pi
+    xs, ys = get_circle(circle_p1, circle_p2, n_circle_pts)
+    xs, ys = transform(xs, ys, angle, scale_x, scale_y)
+    xs += shift_x
+    ys += shift_y
+    img = to_image(xs[n_pts_skip // 2:-n_pts_skip // 2],
+                   ys[n_pts_skip // 2:-n_pts_skip // 2], 30)
+
+    label = [np.sin(angle_rad), np.cos(angle_rad)]
+    return img, label
+```
+
+Be careful not to overestimate the 'shift_thresh' value. If it is too large, some images will not include the information needed, and the network will not learn. In my case, the value of 0.8 was too much.
+
+### 
