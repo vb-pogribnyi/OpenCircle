@@ -2309,4 +2309,99 @@ This filter also does not pay much attention to center pixels, mostly edge pixel
 
 Now assume we understand how the "Output" matrix is formed (there is such matrix for every 'filter_out_idx'). The average value of this matrix would be the first input to our dense network. If we remind ourselves of how the dense network work, we may connect the filters output to the "Grand output" - output of the whole network. So, if all the filters output a positive value, the network tend to output "Large Sin, zero Cos". If some filters output positive value, others negative, in such manner that they compensate each other - the network will output zero for both Sin and Cos, which should never happen, theoretically.
 
- 
+##  5. Real data
+
+Any ML model is useless without application to a real application (or real data). Usefulness of this particular model is still questionable, but it's still nice to know that it works for the real data.
+
+### 5.1 Data
+
+To collect the data for testing, I draw a couple of open circles on a paper and took a photo of it:
+
+![img_real](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\05_real\img_real.jpg)
+
+Then cut it in a drawing software into pieces that remind our dataset:
+
+![02](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\05_real\01.png)
+
+Now there are a couple of problems that prevent us from feeding this through the model. First, this image is too large and has to be scaled down to 30x30. Second, this image is not square, so we need to crop it first.
+
+Let's write a script that does it for us:
+
+```python
+import os
+import cv2 as cv
+import numpy as np
+import matplotlib.pyplot as plt
+
+if __name__ == '__main__':
+    for f in os.scandir('data_real'):
+        img = cv.imread(f.path, cv.IMREAD_GRAYSCALE)
+        img_size = np.min(img.shape)
+        img = img[:img_size, :img_size]
+        img = img.astype(float)
+        img = cv.resize(img, (30, 30))
+        img = img - np.min(img)
+        img = img / np.max(img)
+        img = 1 - img
+
+        plt.pcolor(img, cmap='Wistia')
+        plt.show()
+```
+
+The code suggests that all the images we cut by hand should be in a folder called 'data_real'. OpenCV reads images as an array of integers with values in range 0-255. Since our network accepts arrays with values 0-1 - we also have to convert the images to floats and normalize it, by subtracting min value from each image and dividing by max value. Also since on our images the circle is black-on-white, and in the dataset the circle is white-on-black, we end our preprocessing with line 'img = 1 - img', which inverts the image.
+
+Here's an example of what the code should output:
+
+![03](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\05_real\im_02.png)
+
+There is some inconsistency between OpenCV and Matplotlib for y-axis, so the image looks flipped vertically. This is the same image as on the plot above.
+
+Now given the data, we can transform it into PyTorch-friendly dataloader and run it through our model. To run it through the model, we'll use our function from eval algorithm, which accepts a model and a dataloader. This seems perfect, except this function accepts a dataset which also includes labels, which we don't have for our simulated data. Well that's not a problem, we can substitute the real labels with empty (zeros) tensor. Here's how the updated code looks like:
+
+```python
+import os
+import torch
+import cv2 as cv
+import numpy as np
+import matplotlib.pyplot as plt
+from torch.utils.data import TensorDataset, DataLoader
+import models
+from eval import eval_model
+
+if __name__ == '__main__':
+    device = torch.device('cpu')
+    data = []
+    for f in os.scandir('data_real'):
+        print(f.name)
+        img = cv.imread(f.path, cv.IMREAD_GRAYSCALE)
+        img_size = np.min(img.shape)
+        img = img[:img_size, :img_size]
+        img = img.astype(float)
+        img = cv.resize(img, (30, 30))
+        img = img - np.min(img)
+        img = img / np.max(img)
+        img = 1 - img
+
+        # plt.pcolor(img, cmap='Wistia')
+        # plt.show()
+
+        data.append(img)
+    data = torch.tensor(data)\
+        .float().unsqueeze(1).to(device)
+    dataset = TensorDataset(data, torch.zeros_like(data))
+    dataloader = DataLoader(dataset, 1,  shuffle=False)
+
+    for f in os.scandir('models'):
+        if f.name != 'LargeWin_4_2_2_3_2_7_7_wd.pt':
+            continue
+        print(f)
+        model = models.load_from_file(f)
+        eval_model(model, dataloader)
+
+```
+
+While running the code, it failed right away for me:
+
+![im_02_pred](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\05_real\im_02_pred.png)
+
+It predicts completely wrong direction (which is by the way not the case for all the images). So we have a chance to investigate this case.
