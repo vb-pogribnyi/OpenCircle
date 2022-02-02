@@ -141,13 +141,27 @@ def generate_image():
     open_percent = np.random.uniform(10, 40)
     circle_p1 = np.random.uniform(0.7, 1.)
     circle_p2 = np.random.uniform(0.7, 1.)
-    scale_x = np.random.uniform(0.5, 1.1)
-    scale_y = np.random.uniform(0.5, 1.1)
+    scale_x = np.random.uniform(0.2, 1.1)
+    scale_y = np.random.uniform(0.2, 1.1)
+    shift_x, shift_y = 0, 0
+    shift_thresh = 0.5
+    if scale_x < shift_thresh:
+        shift_x = np.random.uniform(
+            -shift_thresh + scale_x,
+            shift_thresh - scale_x
+        )
+    if scale_y < shift_thresh:
+        shift_y = np.random.uniform(
+            -shift_thresh + scale_y,
+            shift_thresh - scale_y
+        )
 
     n_pts_skip = int(n_circle_pts / 100 * open_percent)
     angle_rad = angle / 180 * np.pi
     xs, ys = get_circle(circle_p1, circle_p2, n_circle_pts)
     xs, ys = transform(xs, ys, angle, scale_x, scale_y)
+    xs += shift_x
+    ys += shift_y
     img = to_image(xs[n_pts_skip // 2:-n_pts_skip // 2],
                    ys[n_pts_skip // 2:-n_pts_skip // 2], 30)
 
@@ -163,11 +177,12 @@ if __name__ == '__main__':
     plt.gcf().set_size_inches(8, 8)
     plt.show()
 
-    n_images = 256 * 1024
+    n_images = 4 * 1024
     images, labels = [], []
     for i in tqdm(range(n_images)):
         img, label = generate_image()
         images.append(img)
         labels.append(label)
+
     np.save('images.npy', np.array(images))
     np.save('labels.npy', np.array(labels))
