@@ -2521,4 +2521,28 @@ def generate_image():
 
 Be careful not to overestimate the 'shift_thresh' value. If it is too large, some images will not include the information needed, and the network will not learn. In my case, the value of 0.8 was too much.
 
-### 
+### 5.7 The result
+
+After training the network I got significantly better result. The second convolution filters started paying attention to the central pixels, and all the real images were recognized (more or less) correctly.
+
+Here is the image of the weights after training:
+
+![fixed_l1](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\05_real\fixed_l1.png)
+
+![fixed_l2](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\05_real\fixed_l2.png)
+
+These are the filters for the first and second convolutions along with the output for the same real image I used before. The filters have remarkably better filling of the central pixels.  
+
+Here's what the evaluation script outputs with the newly trained model:
+
+![im_03_pred](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\05_real\im_03_pred.png)
+
+Overall, I'm happy with the model performance. I think I'm ready to leave it like it is.
+
+## Ourto
+
+This article does not cover many topics it may have covered. For example, operation of the first convolution layer. Or the connection between the second convolution and actual output may be described in more detail. A research of other architectures and their comparison may have been done. But this article is already too large, so I'm afraid someone else will have to cover these topics (maybe me, but later).
+
+This article was meant to give the readers better understanding of the neural network operation, a simple example of research and debugging. Hope it did well.
+
+Good luck and happy coding! 

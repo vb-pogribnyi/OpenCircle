@@ -31,7 +31,7 @@ if __name__ == '__main__':
     dataloader = DataLoader(dataset, 1,  shuffle=False)
 
     for f in os.scandir('models'):
-        if f.name != 'LargeWin_4_2_2_3_2_7_7_wd.pt':
+        if f.name != 'LargeWin_5_2_2_3_2_7_7_fitted.pt':
             continue
         print(f)
         model = models.load_from_file(f)
