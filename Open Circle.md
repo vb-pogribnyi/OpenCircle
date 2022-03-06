@@ -2,17 +2,27 @@
 
 ## Introduction
 
-This article is an attempt to describe a machine learning model performance for a simple type of images. The images are generated synthetically, multiple model architectures with different parameters are tested. Afterwards, I try to explain the performance principles for each trained model. 
+We all know that convolutional neural networks are superior for processing images. So given a dataset of images like the one below, they could be easily trained to tell at which point the circle is broken.
+
+![dataset_sample](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\01_dataset\dataset_sample.png)
+
+But how does it actually do it? Theoretically, I may generate a synthetic dataset, train the network, then apply to a real data like this (I've drown these myself with a pencil):
+
+![real_sample](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\05_real\real_sample.png)
+
+But many of us know that the network trained on a synthetic dataset doesn't necessarily work for the real data. 
+
+Trying to answer this question, I made a little research, about which I'm telling in this article. I trained a network on a synthetic dataset, analyzed its performance, made it work for real data.
 
 ## 1. Dataset
 
 The dataset consists of images of open circles 30x30 pixels. There will be something I call 'core image', which is a collection of x-y coordinates of points, meant to be connected by lines. This core image will be then drawn on a bitmap, a noise will be added to it, and it will be fed to the NN model.
 
+![dataset_pipeline](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\01_dataset\dataset_pipeline.png)
+
+On the picture above: core image, bitmap, noisy bitmap.
+
 The core image will represent a circle itself. But since I want to generate all kinds of circle variations, including ovals, circles with linear edges (half circle - half rectangle) - I will need to introduce some additional logic. After the image is generated - it will be scaled and rotated at a random angle, because, again, we want to generate all kinds of circles.
-
-I guess the introduction was not really clear about what we're going to do. I will explain all the details below, and include examples. So keep up!
-
-Code described in this chapter is assumed to be kept in a single file called 'generate_dataset.py'
 
 ### 1.1 Bezier curves
 
@@ -61,7 +71,7 @@ if __name__ == '__main__':
     plt.show()
 ```
 
-The get_corner_points function builds the curve itself. It accepts the number of points generated, as parameter. The function is called this way because it generates 'corners' of our circle. If I mirror them around the image, I will get a complete circle. In other words, if I changed the main code this way:
+The get_corner_points() function builds the curve itself. It accepts the number of points generated, as parameter. The function is called this way because it generates 'corners' of our circle. If I mirror them around the image, I will get a complete circle. In other words, if I changed the main code this way:
 
 ```python
 if __name__ == '__main__':
@@ -153,7 +163,7 @@ def get_circle(p1, p2, n):
 
  ![curve_5](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\01_dataset\circle_5.png)
 
-The image on the right shows what we have now. Notice that if we follow the order of the points counter-clockwise, we start at corner 4, first point, then meet corner 4 last point, then corner 3 last point, corner 3 first point, corner 1 first point, and so on. I want to reorder things around so they look like on the image on the left:
+The image on the right shows what we have now. Notice that if we follow the order of the points counter-clockwise, we start at corner 4, first point, then meet corner 4 last point, then corner 3 last point, corner 3 first point, corner 1 first point, and so on. We need to reorder things around so they look like on the image on the left:
 
 ```python
 def get_circle(p1, p2, n):
@@ -201,11 +211,11 @@ Let's print the result and see what we have:
 
 ![circle_6](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\01_dataset\circle_6.png)
 
-Looks fine. Now let's collect all the points in one array, by concatenation. There is only one issue. I want the array's first point to be the one at 'zero degrees', or this one:
+Looks fine. Now let's collect all the points in one array, by concatenation. There is only one issue. I want the array's first point to be the one at 'zero degrees', or the one marked with a red cross below:
 
 ![circle_7](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\01_dataset\circle_7.png)
 
-This will make me to divide line41 into halves, then concatenate the points:
+This will make me divide line41 into halves, then concatenate the points:
 
 ```python
     xs = np.concatenate([
@@ -237,7 +247,7 @@ Now by plotting the xs and ys, and by plotting them partially, we get our open c
 
 ![circle_8](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\01_dataset\circle_8.png)
 
-Now we need to make sure that the distance between the points is uniform. The easy way to do it would be to use numpy interp function. To do that, I will create an array of distances for the current image, then an array of desired (uniform) distances, and interpolate the xs and ys arrays on the desired distances:
+Now we need to make sure that the distance between the points is uniform. The easy way to do it would be to use numpy interp function. To do that, I will create an array of distances between points for the current circle, then an array of desired (uniform) distances, and make the interpolation:
 
 ```python
     dx = np.diff(xs)
@@ -257,13 +267,15 @@ Now xs and ys arrays have n items each, and if we plot the images above again, w
 
 ![circle_9](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\01_dataset\circle_9.png)
 
-Notice that image on the left is cut by 30% (since we do this line):
+Notice that image on the left is cut by 30% (since we have this code):
 
 ```python
 plt.plot(xs[15:-15], ys[15:-15])
 ```
 
-Now I will add to this function only a return value. The final code looks like this (assuming the code from the previous chapter is still at place):
+The gap has become larger, because we have smaller amount of points overall, but still removing 15 of them.
+
+Now I will add to this function only a return value. The final code for the function looks like this:
 
 ```python
 def get_circle(p1, p2, n):
@@ -328,7 +340,7 @@ if __name__ == '__main__':
 
 ### 1.3 Random transform
 
-To generate the 'all kinds of open circles', let's rotate and scale what we have. The operation will be done by matrix multiplication. The function responsible for this transform will be accepting the following parameters:
+To generate the 'all kinds of open circles, let's take what we have, and scale it at a random value. And also rotate. The operation will be done by matrix multiplication. The function responsible for this transform will be accepting the following parameters:
 
 - x and y coordinates of our circle
 - rotation angle
