@@ -346,7 +346,7 @@ To generate the 'all kinds of open circles, let's take what we have, and scale i
 - rotation angle
 - scale x, scale y
 
-Let's create a stub for the function:
+So this would be a stub for the function:
 
 ```python
 def transform(xs, ys, theta, xscale, yscale):
@@ -467,13 +467,13 @@ Now we're ready to move to the next stage - draw an actual image, with pixels - 
 
 ### 1.4 Converting to pixels
 
-The function we're about to write will be accepting an array of point coordinates (which we already have), and output our final 30x30 image. The function will draw the points as lines, and will use OpenCV library for that. So the first thing is, obviously, to import OpenCV to our project:
+The function we're about to write will be accepting an array of point coordinates (which we already have), and output our final 30x30 image. We will use OpenCV for that, so the first thing is, obviously, to import it:
 
 ```python
 import cv2 as cv
 ```
 
-Next let's make our function stub and change main function so that we can see the result:
+Next let's a stub for our function:
 
 ```python
 def to_image(xs, ys, img_size):
@@ -492,7 +492,7 @@ if __name__ == '__main__':
     plt.show()
 ```
 
-Now let's add drawing procedure. Keep in mind that our core image is in range (0, 1) - this should be mapped to (0, img_size), otherwise our image will appear as a single dot:
+Now let's add drawing procedure. Keep in mind that our core image is in range (0, 1) - this should be mapped to (0, 30), otherwise our image will appear as a single dot:
 
 ```python
 def to_image(xs, ys, img_size):
@@ -539,7 +539,7 @@ Second is noise added to every point:
     ys += np.random.normal(0, img_noise_std, ys.shape)
 ```
 
-These types of noise are applied before the image is scaled. Third type of noise will be regular white noise, and will be applied to the whole image after it is drawn:
+These types of noise are applied before the image is scaled. Third type of noise will be a white noise, and will be applied to the whole image after it is drawn:
 
 ```python
 # White noise
@@ -670,7 +670,7 @@ def to_image(xs, ys, img_size):
 
 ### 1.5 Image generator
 
-Now that we're able to create image given some parameters, let's create a function that will generate those parameters and consequently generate the image. This function will also give actual 'opennes' to the image, and generate label for it. The function will accept no parameters, since it will generate everything, and will output the image along with its labels. The labels will be given in form of sin and cos of the angle. We don't want to use the angle itself because it will be hard for the network to figure out the importance of the error. 
+Now that we're able to create an image given some parameters, let's create a function that will generate those parameters and consequently generate the image. This function will also give actual 'opennes' to the image, and generate label for it. The function will accept no parameters, since it is going generate the parameters, and will output the image along with its label. The labels will be given in form of sin and cos of the angle. We don't want to use the angle itself because it will be hard for the network to figure out the importance of the error. 
 
 For example, imagine we have a circle opened at 0.1 degrees. Our  network guesses 359 degrees, which is a good guess. But for the network the error seems high. If we use cos instead, it will be close to 1 for both 0.1 and 359 degrees.
 
@@ -700,7 +700,7 @@ if __name__ == '__main__':
     plt.show()
 ```
 
-Now we have to implement the randomizations. Let's start with the angle, so that we can have the label as well. To do that we need generate the angle in degree, then transform it into radians for the label. Then we need to insert it into transform function:
+Now we have to implement the randomizations. Let's start with the angle, so that we can implement the label as well. We need to generate the angle in degrees, then transform it into radians for the label. We need to insert it into the transform function as well:
 
 ```python
     angle = np.random.uniform(0, 360)
@@ -725,7 +725,7 @@ Now we add 'opennes' to the circle. This will be done by trimming some values fr
 	...
 ```
 
-This gives us a circle that is open in 20% of its length. Notice that if we change the number of points for the core image:
+This gives us a circle that is open in 20% of its length. Note that if we change the number of points for the core image:
 
 ```python
 n_circle_pts = 350
@@ -991,16 +991,9 @@ Now if you run this on your machine, after a while you will have a dataset to tr
 
 ## 2. Model
 
-We will test two different architectures, for start (then we'll try to improve them):
+### 2.1. Architecture
 
-- Two large kernels (5-7 px), large pooling (2-4 px), dense
-- Two small kernels (3 px), large kernel (5 px) 4 channels, 2 px pooling between them, dense layer
-
-For each architecture, we will launch multiple experiments with different number of channels, to figure out which layers are important.
-
-### 2.1 LargeWin
-
-LargeWin is a code name for "Two large kernels (5-7 px), large pooling (2-4 px), dense" model. In more detail, this model looks as follows:
+For our purposes, we will use a 2-layer CNN network, followed by a dense layer. We will have relatively large kernels (5-7 px) and large poolings (2-4 px). So the whole architecture may be described like this:
 
 - Conv 2d
 
@@ -1053,9 +1046,9 @@ class LargeWin(torch.nn.Module):
         return x
 ```
 
-I'm passing the parameters here as a dict, so that it will be easier to automate testing later on. Among the parameters there are: ch1, ch2 = number of filters for the convolutions. Ch3 - number of hidden neurons for the dense network. Pool1_size and pool2_size - sizes of the pooling layers after the convolutions. Ks1 and ks2 - convolutions kernel sizes. 
+I'm passing the parameters here as a dict, so that it will be easier to automate testing later on. Among the parameters there are: ch1, ch2 - number of filters for the convolutions. Ch3 - number of hidden neurons for the dense network. Pool1_size and pool2_size - sizes of the pooling layers after the convolutions. Ks1 and ks2 - convolutions kernel sizes. 
 
-Let's now add the network layers. Note that dense layer input size (after flattening) will depend on the size of kernels and pooling windows. It will be calculated in the constructor as well:
+Let's now add the network layers. Note that dense layer input size (after flattening) will depend on the size of kernels and pooling windows. It will be calculated in the model constructor as ch_in:
 
 ```python
         self.conv1 = torch.nn.Conv2d(1, ch1, ks1)
@@ -1073,7 +1066,7 @@ Let's now add the network layers. Note that dense layer input size (after flatte
 
 Here I'm ignoring the cases where the number of inputs is larger than 4, because it will be harder to visualize.
 
-The forward() calls the layers one by one, adding poolings and nonlinearities between them. Here is how the full code for the model looks like:
+The forward() method calls the layers one by one, adding poolings and nonlinearities between them. Here is how the full code for the model looks like:
 
 ```python
 import torch
@@ -1117,57 +1110,7 @@ class LargeWin(torch.nn.Module):
         return torch.tanh(x)
 ```
 
-### 2.2 SmallWin
-
-Next we move on to the model with smaller kernels and poolings. It will look very similar to the previous one, except there will be three convolutional layers instead of two, and the size of poolings will be uniform.
-
-```python
-class SmallWin(torch.nn.Module):
-    def __init__(self, params):
-        ch1, ch2 = params['ch1'], params['ch2']
-        ch3, ch4 = params['ch3'], params['ch4']
-        ks1, ks2 = params['ks1'], params['ks2']
-        img_size = 30
-        pool_size = 2
-        super(SmallWin, self).__init__()
-        self.conv1 = torch.nn.Conv2d(1, ch1, ks1)
-        self.conv2 = torch.nn.Conv2d(ch1, ch2, ks2)
-        self.conv3 = torch.nn.Conv2d(ch2, ch3, ks3)
-
-        img_size1 = (img_size - ks1 // 2 * 2) // pool_size
-        img_size2 = (img_size1 - ks2 // 2 * 2) // pool_size
-        img_size3 = (img_size2 - ks3 // 2 * 2) // pool_size
-        ch_in = img_size3 ** 2 * ch3
-        if ch_in > 4 or img_size3 <= 0:
-            raise Exception('Crazy input')
-        self.dense1 = torch.nn.Linear(ch_in, ch4)
-        self.dense2 = torch.nn.Linear(ch4, 2)
-        self.pool = torch.nn.AvgPool2d(pool_size)
-
-    def forward(self, x):
-        x = self.conv1(x)
-        x = self.pool(x)
-        x = torch.tanh(x)
-
-        x = self.conv2(x)
-        x = self.pool(x)
-        x = torch.tanh(x)
-
-        x = self.conv3(x)
-        x = self.pool(x)
-        x = torch.tanh(x)
-
-        x = x.reshape([x.shape[0], -1])
-        x = self.dense1(x)
-        x = torch.tanh(x)
-        x = self.dense2(x)
-
-        return torch.tanh(x)
-```
-
-Note that we check if image size after convolutions is negative. This may happen if we test the network with both large pooling and large kernel. 
-
-### 2.3 Testing the models
+### 2.2 Testing the model
 
 Okay, this was a lot of code and we did not run it yet. Let's fix this now. We'll create a main function, that will run a sample input through the model. But first we need to generate this sample, so let's import our generate_dataset.py:
 
@@ -1183,7 +1126,7 @@ if __name__ == '__main__':
     print(img.shape)
 ```
 
-Next we'll create the model objects. Note that they receive parameters as a dict, so it will look somewhat weird. Let's start with LargeWin model:
+Next we'll create the model objects. Note that they receive parameters as a dict, so it will look somewhat weird:
 
 ```python
 if __name__ == '__main__':
@@ -1221,35 +1164,11 @@ This should output original image size and the model output:
 LargeWin tensor([[-0.5127,  0.0033]], grad_fn=<TanhBackward>)
 ```
 
-Now we need to add a similar test for the second model. Here is how the final main function looks:
-
-```python
-if __name__ == '__main__':
-    img, label = generate_image()
-    print(img.shape)
-    modelLargeWin = LargeWin({
-        "ch1": 4, 'ch2': 4, 'ch3': 4,
-        'pool1_size': 4, 'pool2_size': 2,
-        'ks1': 7, 'ks2': 5
-    })
-    modelSmallWin = SmallWin({
-        "ch1": 4, 'ch2': 4, 'ch3': 4, 'ch4': 4,
-        'ks1': 3, 'ks2': 3, 'ks3': 5
-    })
-
-    img_t = torch.tensor(img).float()
-    img_t = img_t.unsqueeze(0).unsqueeze(0)
-    outLargeWin = modelLargeWin(img_t)
-    print('LargeWin', outLargeWin)
-    outSmallWin = modelSmallWin(img_t)
-    print('SmallWin', outSmallWin)
-```
-
-If both models output something healthy (two numbers for sin and cos) - we are ready to move on to training.
+If the model outputs something healthy (two numbers for sin and cos) - we are ready to move on to training.
 
 ## 3. Training
 
-Now having models, and having the data, we are ready to train the models on the data. Let's start by loading the data, converting it to tensors, and creating a dataloader.
+Now having the model, and having the data, we are ready for the training. Let's start by loading the data, converting it to tensors, and creating a dataloader.
 
 ```python
 import os
@@ -1270,7 +1189,7 @@ if __name__ == '__main__':
     print(len(train_dataloader))
 ```
 
-Now let's add a function that does actual training. It will accept the model to train and the data to train on. As a result, it will save the trained parameters in a file.
+Now the function for actual training. Nothing fancy so far. Train the model, save the weights in a file.
 
 ```python
 def train_model(model, parameters, dataloader):
@@ -1297,7 +1216,7 @@ def train_model(model, parameters, dataloader):
     torch.save(model.state_dict(), file)
 ```
 
-Well, it will have to take a 'parameters' argument, to know how to call the model. To test the code, I will create a model object in the main function and train it using train_model(). To do that, I will also need to import the file with the models (assuming it's called 'models.py'). Note that the training script saves the model into a 'models' folder, so we need to create that.
+To test this script, I simply create a model and run it through the training function. Note that it will attempt to save the weight in a 'models' folder, so we need to create it.
 
 ```python
 import models
@@ -1314,7 +1233,7 @@ import models
     train_model(model, parameters, train_dataloader)
 ```
 
-Also note small number of epochs in the training script. By the way, I'm testing the script with a small dataset, so that it doesn't take long to load the data and to train.
+Also note the small number of epochs in the training script. By the way, I'm testing the script with a small dataset, so that it doesn't take long to load the data and to train.
 
 After running the script, we have a 'models' folder created and file 'LargeWin_2_2_2_3_2_5_7.pt' inside, which means the training works fine. Let's now log the process, so that we can easily see which models learn better. We will use mlflow for that:
 
@@ -1322,13 +1241,14 @@ After running the script, we have a 'models' folder created and file 'LargeWin_2
 import mlflow
 ```
 
-I will be using the library in the training script. Will be logging model name and parameters, as well as its loss for each epoch. Here is how the train_model() looks like after we do that:
+It will be logging model name and parameters, as well as the loss for each epoch. Here is how the train_model() looks like after I do that:
 
 ```python
 def train_model(model, parameters, dataloader):
     opt = torch.optim.Adam(model.parameters())
     mse = torch.nn.MSELoss()
     with mlflow.start_run(run_name="OpenCircle"):
+        # Log the model name
         mlflow.log_param('model_type', type(model).__name__)
         for key in parameters:
             mlflow.log_param(key, parameters[key])
@@ -1344,6 +1264,7 @@ def train_model(model, parameters, dataloader):
             train_loss = train_loss / len(dataloader)
             if epoch % 10 == 0:
                 print(epoch, train_loss.item())
+                # Log the progress
                 mlflow.log_metric(
                     'train_loss',
                     train_loss.item(), 
