@@ -1287,7 +1287,7 @@ mlflow ui --port=5000
 
 and open our browser at localhost:5000 - we should see a report about training one model.
 
-Next we'll need to add a function for trying different combinations for the model parameters and training the models. I other words, we should change this
+Next we'll need to try different parameters for the model training. I other words, we should change this
 
 ```python
     parameters = {
@@ -1360,164 +1360,15 @@ Also remember that our model can produce 'Crazy input' exceptions, so we need to
                                 )
 ```
 
-If we run the script, after a while we should have a bunch of models exported, and mlflow tracker should indicate this activity. This means that all is going fine. We'll need to add similar script for the second model and we're ready to train real models. The code for the second model has additional ch4 and ks3 parameters, and doesn't have pooling sizes. Except these the code is identical:
+If we run the script, after a while we should have a bunch of models exported, and mlflow tracker should indicate this activity. This means that all is going fine. 
 
-```python
-    def run_train_model_small(ch1, ch2, ch3, ch4,
-                        ks1, ks2, ks3):
-        try:
-            parameters = {
-                "ch1": ch1,
-                'ch2': ch2,
-                'ch3': ch3,
-                'ch4': ch4,
-                'ks1': ks1,
-                'ks2': ks2,
-                'ks3': ks3
-            }
-            model = models.SmallWin(parameters).to(device)
-            train_model(model, parameters, train_dataloader)
-        except Exception as e:
-             print(e)
-
-    for ch1 in [2, 4]:
-        for ch2 in [2, 4]:
-            for ch3 in [2, 4]:
-                for ch4 in [2, 4]:
-                    for ks1 in [3, 5]:
-                        for ks2 in [3, 5]:
-                            for ks3 in [3, 5]:
-                                run_train_model_small(
-                                    ch1, ch2, ch3, ch4,
-                                    ks1, ks2, ks3
-                                )
-```
-
-Here is the full code:
-
-```python
-import os
-import torch
-import mlflow
-import models
-import numpy as np
-from torch.utils.data import TensorDataset, DataLoader
-
-def train_model(model, parameters, dataloader):
-    opt = torch.optim.Adam(model.parameters())
-    mse = torch.nn.MSELoss()
-    with mlflow.start_run(run_name="OpenCircle"):
-        mlflow.log_param('model_type', type(model).__name__)
-        for key in parameters:
-            mlflow.log_param(key, parameters[key])
-        for epoch in range(51):
-            train_loss = 0
-            for input, label in dataloader:
-                opt.zero_grad()
-                out = model(input)
-                loss = mse(out, label)
-                train_loss += loss
-                loss.backward()
-                opt.step()
-            train_loss = train_loss / len(dataloader)
-            if epoch % 10 == 0:
-                print(epoch, train_loss.item())
-                mlflow.log_metric(
-                    'train_loss',
-                    train_loss.item(),
-                    epoch
-                )
-        params = list(parameters.values())
-        params_string = '_'.join([str(i) for i in params])
-        file = open('models/{}_{}.pt'.format(
-            type(model).__name__,
-            params_string
-        ), 'wb')
-        torch.save(model.state_dict(), file)
-
-if __name__ == '__main__':
-    device = torch.device('cuda:0'
-        if torch.cuda.is_available()
-        else 'cpu')
-    data = torch.tensor(np.load('images.npy'))
-    labels = torch.tensor(np.load('labels.npy'))
-    train_data = data.float().unsqueeze(1).to(device)
-    train_labels = labels.float().to(device)
-    train_dataset = TensorDataset(train_data, train_labels)
-    train_dataloader = DataLoader(train_dataset, 1024)
-    print(len(train_dataloader))
-
-    os.makedirs('models', exist_ok=True)
-
-    def run_train_model_large(ch1, ch2, ch3,
-                        pool1_size, pool2_size,
-                        ks1, ks2):
-        try:
-            parameters = {
-                "ch1": ch1,
-                'ch2': ch2,
-                'ch3': ch3,
-                'pool1_size': pool1_size,
-                'pool2_size': pool2_size,
-                'ks1': ks1,
-                'ks2': ks2
-            }
-            model = models.LargeWin(parameters).to(device)
-            train_model(model, parameters, train_dataloader)
-        except Exception as e:
-             print(e)
-
-    for ch1 in [2, 4]:
-        for ch2 in [2, 4]:
-            for ch3 in [2, 4]:
-                for pool1_size in [2, 3, 4, 8]:
-                    for pool2_size in [2, 3, 4, 8]:
-                        for ks1 in [5, 7]:
-                            for ks2 in [5, 7]:
-                                run_train_model_large(
-                                    ch1, ch2, ch3,
-                                    pool1_size,
-                                    pool2_size,
-                                    ks1, ks2
-                                )
-
-    def run_train_model_small(ch1, ch2, ch3, ch4,
-                        ks1, ks2, ks3):
-        try:
-            parameters = {
-                "ch1": ch1,
-                'ch2': ch2,
-                'ch3': ch3,
-                'ch4': ch4,
-                'ks1': ks1,
-                'ks2': ks2,
-                'ks3': ks3
-            }
-            model = models.SmallWin(parameters).to(device)
-            train_model(model, parameters, train_dataloader)
-        except Exception as e:
-             print(e)
-
-    for ch1 in [2, 4]:
-        for ch2 in [2, 4]:
-            for ch3 in [2, 4]:
-                for ch4 in [2, 4]:
-                    for ks1 in [3, 5]:
-                        for ks2 in [3, 5]:
-                            for ks3 in [3, 5]:
-                                run_train_model_small(
-                                    ch1, ch2, ch3, ch4,
-                                    ks1, ks2, ks3
-                                )
-```
-
-Run it for a small dataset with small number of epochs and make sure that the models are exported, the training is tracked by mlflow, and the script does not crash. If it's ok, generate a larger dataset (I use 256k examples) and run each model for larger number of epochs (I use 5000). It may take some time, the training on my machine takes a couple of weeks. After this is done, we'll be back to analyze the results.
+Run it for a small dataset with small number of epochs and make sure that the models are exported, the training is tracked by mlflow, and the script does not crash. If it's ok, generate a larger dataset (I use 256k examples) and run the model for larger number of epochs (I use 5000). It may take some time, the training on my machine takes a couple of weeks. After this is done, we'll be back to analyze the results.
 
 ## 4. Analysis
 
 ### 4.1 Evaluation
 
-After some models has been trained, we may want to see how they perform. So we will load the same (or maybe newly generated) dataset, and pass them one by one through a selected model. So the main function will look roughly the same as the one in the training script, but with minor changes:
+After some models has been trained, we may want to see how they perform. So we will load the same (or maybe newly generated) dataset, and pass it through a selected model. So the main function will look roughly the same as the one in the training script, but with minor changes:
 
 ```python
 import os
@@ -1543,37 +1394,21 @@ if __name__ == '__main__':
         eval_model(model, dataloader)
 ```
 
-So basically we create a dataloader, then look at what models we have. Then one by one, we load these models and pass our dataloader through them. Now we need to implement the missing functions. We start with the one which will load a model from a file. It will look at the file name, and decide which class it is going to instantiate, as well as what parameters it will pass.
+So basically we create a dataloader, then look at what models we have. Then one by one, we load these models and pass our dataloader through them. Now we need to implement the missing functions, like the one that loads a model from a file. It will look at the file name, and decide how to create the model object.
 
 ```python
 def load_from_file(f):
     name_parts = f.name.split('.')[0].split('_')
-    model_class_name = name_parts[0]
-    if model_class_name == 'LargeWin':
-        model_class = models.LargeWin
-    elif model_class_name == 'SmallWin':
-        model_class = models.SmallWin
-    if model_class_name == 'LargeWin':
-        parameters = {
-            "ch1": int(name_parts[1]),
-            'ch2': int(name_parts[2]),
-            'ch3': int(name_parts[3]),
-            'pool1_size': int(name_parts[4]),
-            'pool2_size': int(name_parts[5]),
-            'ks1': int(name_parts[6]),
-            'ks2': int(name_parts[7])
-        }
-    else:
-        parameters = {
-            "ch1": int(name_parts[1]),
-            'ch2': int(name_parts[2]),
-            'ch3': int(name_parts[3]),
-            'ch4': int(name_parts[4]),
-            'ks1': int(name_parts[5]),
-            'ks2': int(name_parts[6]),
-            'ks3': int(name_parts[7])
-        }
-    model = model_class(parameters)
+    parameters = {
+        "ch1": int(name_parts[1]),
+        'ch2': int(name_parts[2]),
+        'ch3': int(name_parts[3]),
+        'pool1_size': int(name_parts[4]),
+        'pool2_size': int(name_parts[5]),
+        'ks1': int(name_parts[6]),
+        'ks2': int(name_parts[7])
+    }
+    model = models.LargeWin(parameters)
     model.load_state_dict(torch.load(
         open(f.path, 'rb'),
         map_location='cpu'
@@ -1610,21 +1445,23 @@ def eval_model(model, dataloader):
         plt.show()
 ```
 
-Note that we are plotting the output as lines, corresponding to sin and cos prediction. By looking at the image we can decide if the model performs good enough:
+Note that we are plotting the output as lines, corresponding to sin and cos prediction. So we're looking at the place those lines cross. By looking at the image we can decide if the model performs good enough:
 
 ![01_eval](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\01_eval.png)
 
-By doing this we can visually understand what does the final loss mean. If we have RMSE 0.12 after training, is it good or bad. Or to judge if the model predicts wrong really noisy images, or is bad in general. Ultimately, to see if it work at all. 
+Also we visually understand what does the final loss mean. If we have MSE of 0.12 after training - is it good or bad. Or to judge if the model predicts wrong really noisy images, or is bad in general. Ultimately, to see if it work at all. 
 
 ### 4.2 Performance statistics
 
-Now that we have trained a bunch of models, we can see which parameters improve the model performance. To do that, we will find correlation scores between the loss at the end of the training and the model parameters (filters number and pooling size).
+Now that we have trained a bunch of models, we can see which parameters affect the model performance. Afterwards, we may choose a set of parameters for our final model(s)
+
+To do that, we will find correlation scores between the loss at the end of the training and the model parameters (filters number and pooling size).
 
 To start with, let's download the mlflow logs. In the mlflow web app, click "download csv" and save in the project directory:
 
 ![runs](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\runs.png)
 
-Now we need to load the file in python with pandas:
+And load the file in python with pandas:
 
 ```python
 import pandas as pd
@@ -1686,7 +1523,7 @@ This will give an image like this:
 
 We see that the model on average performs better with smaller ks2, but the best result was obtained with a large ks2, which is interesting.
 
-After this result is obtained, I will select the models I want to keep. I will modify the training script, the part in which we test different parameter sets:
+I plan to keep working with the models, so I will choose ones with the most promising parameters. I will modify the training script, the part in which we test different parameter sets:
 
 ```python
     for ch1 in [4]:
@@ -1704,11 +1541,13 @@ After this result is obtained, I will select the models I want to keep. I will m
                                 )
 ```
 
-The same procedure will be repeated for the second model, and we'll move on to analyzing the trained weights.
+I won't run the training again, yet. First we need to take a look at the trained filters, because we may need to update the training process.
 
 ### 4.3 Convolution filters
 
-Now that we know that our models are working, let's find out how do they work. We will start with the initial layers, which are convolutions. To analyze their work we will write a script that shows every filter and the model output after each convolution layer. Apart from a plotting tool, we will need to make changes to the models script. First, we have to enable intermediate output, if we want to see it. Second, our load_from_file() function we used earlier for evaluation, will be needed here as well, so I will move it to the models file.
+Now that we know that our models are working, let's find out how do they work. We start with the convolutions. And since the convolutions are composed of filters, we may show the image after each filter is applied. So for example if we have a convolution layer with 4 filters an one channel input image, we want to see 4 images: each of the filters applied to the image. If we have 2 channels input - we will get 8 images: each of the filters applied to each of the layers of the image.
+
+We'll need a plotting tool for that, obviously. But apart from that, we will need to make changes to the models script, to enable intermediate output (output of the first layer, for example). Second, some code organization. Our load_from_file() function we used earlier for evaluation, will be needed here as well, so I will move it to the models file.
 
 To enable the model's intermediate output, we will add a new parameter to its forward() function. Then inside the function, we check the parameter for early output:
 
@@ -1734,9 +1573,7 @@ To enable the model's intermediate output, we will add a new parameter to its fo
         return torch.tanh(x)
 ```
 
-I repeat the procedure for the SmallWin model. The operation is same, except it has 3 convolution layers, so it has three checks. 
-
-Now we may return to the plotting script and sketch its skeleton:
+Now we may return to the plotting script, and sketch its skeleton:
 
 ```python
 import os
@@ -1765,11 +1602,11 @@ for f in os.scandir('models'):
     show_weight(model.conv2.weight, model(t_img, 1)[0])
 ```
 
-Here we are generating an image (setting a seed for random, so that the image is same), loading a model, passing the image through the model, and plotting the information. The source image for all the illustrations below looks like this:
+Here we are generating an image (setting a seed for np.random, so that the image is same), loading a model, passing the image through the model, and plotting the information. The source image for all the illustrations below looks like this:
 
 ![src](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\src.png)
 
-The show_weight() function, which we will write shortly, accepts as arguments the weight to plot and the model output after the weight is applied. It contains some plotting commands along with some logic to arrange the images:
+The show_weight() function accepts as arguments the weight to plot and the model output after the weight is applied. It contains some plotting commands along with some logic to arrange the images:
 
 ```python
 def show_weight(weight, output):
@@ -1802,9 +1639,11 @@ If we run the script, we'll be getting images like these:
 
 ![filters_1](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filters_1.png)
 
+For the first layer (above), and the second layer below:
+
 ![filters_2](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filters_2.png)
 
-These are the first two layer of one model. The last row shows the output of the layer, while the first rows show the filters applied to the previous layer output. For the first layer we see some kind of pattern for filter, and some sort of processing for the image. But for the second filter, both filter weights and output look like complete noise, which is a sign of overfitting. To deal with this, we may use some regularization technique, like L2 regularization. In PyTorch, we need to add a weight_decay parameter for optimizer:
+The last row shows the output of the layer, while the first rows show the filters applied to the previous layer output. For the first layer we see some kind of pattern for filter, and its output looks meaningful. But for the second filter, both filter weights and output look like complete noise, which is a good sign of overfitting. To deal with this, we may use some regularization technique, like L2 regularization. To do that, in PyTorch, we need to add a weight_decay parameter for optimizer:
 
 ```python
 opt = torch.optim.Adam(model.parameters())
@@ -1905,50 +1744,25 @@ if __name__ == '__main__':
                                     pool2_size,
                                     ks1, ks2
                                 )
-
-    def run_train_model_small(ch1, ch2, ch3, ch4,
-                        ks1, ks2, ks3):
-        try:
-            parameters = {
-                "ch1": ch1,
-                'ch2': ch2,
-                'ch3': ch3,
-                'ch4': ch4,
-                'ks1': ks1,
-                'ks2': ks2,
-                'ks3': ks3
-            }
-            model = models.SmallWin(parameters).to(device)
-            train_model(model, parameters, train_dataloader)
-        except Exception as e:
-             print(e)
-
-    for ch1 in [4]:
-        for ch2 in [4]:
-            for ch3 in [2, 4]:
-                for ch4 in [2, 4]:
-                    for ks1 in [3]:
-                        for ks2 in [3, 5]:
-                            for ks3 in [5]:
-                                run_train_model_small(
-                                    ch1, ch2, ch3, ch4,
-                                    ks1, ks2, ks3
-                                )
 ```
 
 After a while, we get another set of trained models. For me, if I visualize the weights, it looks something like this:
 
 ![filters_21](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filters_21.png)
 
+Or for another model:
+
 ![filters_31](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filters_31.png)
 
-These are the samples from the first layer of different models. Here is what the second layer look like:
+Here is what the second layer look like:
 
 ![filters_22](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filters_22.png)
 
+Another model:
+
 ![filters_32](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filters_32.png)
 
-This looks much better. All the filters are symmetric, and the pattern (distribution of lighter and darker parts) is clear. We can move on to exploring the dense network part.
+This looks much better. All the filters are symmetric, and the pattern  is clear. We can move on to exploring the dense network part.
 
 ### 4.4 Dense layers
 
