@@ -1766,7 +1766,7 @@ This looks much better. All the filters are symmetric, and the pattern  is clear
 
 ### 4.4 Dense layers
 
-For illustration purposes we will take the simplest network configuration: 2 inputs, 2 outputs, 2 hidden nodes. Note that we don't have to examine hidden nodes operation. We may only plot the very output vs the very input. So there will be 2 plots for each of the outputs. The 2 inputs will be denoted as x and y, the output - as color. The inputs values vary between -1 and 1, since the activation on the previous layer is tanh. Here's what it looks like in code:
+For illustration purposes we will take the simplest network configuration: 2 inputs, 2 outputs, 2 hidden nodes. Note that we don't have to account for the hidden nodes. We may only plot the very output vs the input. So there will be 2 plots for each of the outputs. The 2 inputs will be denoted as x and y, the output - as color. The inputs values vary between -1 and 1, since the activation on the previous layer is tanh. Here's what it looks like in code:
 
 ```python
 import os
@@ -1803,17 +1803,15 @@ if __name__ == '__main__':
         show_dense(model)
 ```
 
-Note that here I'm setting that model weights for which I want to print the data. This code will output the following image:
+Note that here I'm setting that model weights for which I want to print the data (LargeWin_4_2_2_3_2_7_7_wd). This code will output the following image:
 
 ![dense_2](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\dense_2.png)
 
-The red-ish colors here mean values closer to -1, the yellow-ish +1. Let's take a look at the bottom (cos) image. If the inputs to the network were (-1, 1), top left corner, the output would be -1. If the inputs were (+1, -1) - we would appear in the bottom right corner and output +1. For input like (+1, +1) - the network would output a small value close to 0. The same considerations are applicable for the top plot, of course.
+The red-ish colors here mean values closer to -1, the yellow-ish to +1. Let's take a look at the bottom (cos) image. If the inputs to the network were (-1, 1), top left corner, the output would be -1. If the inputs were (+1, -1) - we would appear in the bottom right corner and output +1. For input like (+1, +1) - the network would output a small value close to 0. The same considerations are applicable for the top plot, of course.
 
-### 4.5 Values from inside
+### 4.5 More values from inside
 
-Okay, we want to figure out what is going on inside the network. A part of this is getting values at the intermediate layers. For example, we want to see an image before convolution, after it, and the same image after pooling. This is relatively straightforward, we only need to add a parameter to our forward() function of the model, but I wanted to make it a separate point, so that it doesn't mix up with everything else.
-
-So here it is. We take our model, add a parameter to the forward() method, and output a value at different stage, depending on the value:
+We may explore the network operation even further. For example, we want to see an image before convolution, after it, and after pooling. For that, we need to change the second parameter for the forward() function. I didn't add this before, not to overcomplicate things:
 
 ```python
     def forward(self, x, out_layer=-1):
@@ -1841,25 +1839,43 @@ So here it is. We take our model, add a parameter to the forward() method, and o
         return torch.tanh(x)
 ```
 
-The default value for the parameter is something invalid, so that the model works from the beginning to the end, unless specified otherwise.
+The default value for the parameter (-1) is something invalid, so that the model works from the beginning to the end, unless specified otherwise.
 
 ### 4.6 All together
 
-To gain an understanding of how the network performs its classification, let's take an example and try to find what led the network to such result.
+The chart below shows briefly the overall operation of the network:
 
-So, say our network outputs a "90°" prediction for an image. For that, the cos output should be close to "+1", the sin output - to "0". Take a look again at the dense network plots above. We get such result when the convolutions output is close to (-1, +1). Next we look at the convolution filters, and try to find when they output such values. Here are again the filters for this particular dense network:
+![filter_chain_expanded](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filter_chain_expanded.png)
 
-![filters_22](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filters_22.png)
+So we have an input image, it is passed through a set of 4 filters (Filter 1 on the chart, or conv1 in our network). This gives us 4 filtered images, which are then passed through another set of filters Filter 2. Since our conv2 layer gives 2 output channels, it has 8 filters in total. The chart shows only 4, belonging to the first out channel. The output of these 4 filters gets summed up, because this is how the convolution layer work. After that we get a 2x2 image, 4 pixels total. The average pooling simply takes the average of those pixels, yielding a single number. This number becomes one of the inputs to the dense network.
 
-So to get the output described above, the left set of filters has to output "-1", the left ones - "+1". Remember that the filters are designed to work in chain:
+Now that things are getting a bit complicated, let's take an example and try to find what led the network to such result.
 
-![filter_chain](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filter_chain.png)
+So, say our network outputs a "90°" prediction for an image. For that, the cos output should be close to "+1", the sin output - to "0". Take a look again at the dense network plots above. We get such result when the convolutions output is close to (-1, +1). 
 
-I think we can improve the understanding of filter operation by example. I wrote a script that illustrates how an actual filter is applied (in this example - filter 2 applied to the "filtered image", because it take less space).
+To get the "90°" output, the first set of filters (belonging to output channel 1, and showed on the chart), has to output "-1", the other set - "+1". 
 
-First of all, the script will draw similar images as above, but it will also have a number ontop of every pixel, so that we can see actual value. Second, it will show each sub-image, multiplied by the filter. This should help to gain understanding of the process.
+To me, after I've done all of that, the question remained, how the filter would output these 4 pixels, that after averaging would become the decisive "-1" and "+1". For that I wrote another script, which illustrates the behaviour of a filter. Let's take a look at its output first:
 
-We start with a function which draws an image with numerical values. To test it, we print our input image. But since the image has  too many pixels, the text ontop merges and we see nothing. So I plotted a fraction of this image nearby:
+![filters_n_1_marks](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filters_n_1_marks.png)
+
+
+
+
+
+
+
+
+
+
+
+
+
+The process of getting this 2x2 image may stay under question, so I wrote a script to shed a light on it. The script illustrates how an actual filter is applied.
+
+First of all, the script will draw the inputs and outputs for the filter, but it will also write a number ontop of every pixel, so that we can see the actual value. Second, it will split the image into parts (since the filter is multiplied by a part of an image) show each sub-image, multiplied by the filter. 
+
+We start with a function that draws an image with numerical values. To test it, we print our input image. But since the image has  too many pixels, the text ontop merges and we see nothing. So I plotted a fraction of this image nearby:
 
 ```python
 import numpy as np
