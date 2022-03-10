@@ -1764,7 +1764,9 @@ Another model:
 
 This looks much better. All the filters are symmetric, and the pattern  is clear. We can move on to exploring the dense network part.
 
-### 4.4 Dense layers
+## 5. Breakdown
+
+### 5.1 Dense layers
 
 For illustration purposes we will take the simplest network configuration: 2 inputs, 2 outputs, 2 hidden nodes. Note that we don't have to account for the hidden nodes. We may only plot the very output vs the input. So there will be 2 plots for each of the outputs. The 2 inputs will be denoted as x and y, the output - as color. The inputs values vary between -1 and 1, since the activation on the previous layer is tanh. Here's what it looks like in code:
 
@@ -1809,9 +1811,51 @@ Note that here I'm setting that model weights for which I want to print the data
 
 The red-ish colors here mean values closer to -1, the yellow-ish to +1. Let's take a look at the bottom (cos) image. If the inputs to the network were (-1, 1), top left corner, the output would be -1. If the inputs were (+1, -1) - we would appear in the bottom right corner and output +1. For input like (+1, +1) - the network would output a small value close to 0. The same considerations are applicable for the top plot, of course.
 
-### 4.5 More values from inside
+### 5.2 General scheme
 
-We may explore the network operation even further. For example, we want to see an image before convolution, after it, and after pooling. For that, we need to change the second parameter for the forward() function. I didn't add this before, not to overcomplicate things:
+The chart below shows briefly the overall operation of the network:
+
+![filter_chain_expanded](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filter_chain_expanded.png)
+
+So we have an input image, it is passed through a set of 4 filters (Filter 1 on the chart, or conv1 in our network). This gives us 4 filtered images, which are then passed through another set of filters Filter 2. Since our conv2 layer gives 2 output channels, it has 8 filters in total. The chart shows only 4, belonging to the first out channel. The output of these 4 filters gets summed up, because this is how the convolution layer work. After that we get a 2x2 image, 4 pixels total. The average pooling simply takes the average of those pixels, yielding a single number. This number becomes one of the inputs to the dense network.
+
+Now that things are getting a bit complicated, let's take an example and try to find what led the network to such result.
+
+So, say our network outputs a "90°" prediction for an image. For that, the cos output should be close to "+1", the sin output - to "0". Take a look again at the dense network plots above. We get such result when the convolutions output is close to (-1, +1). 
+
+To get the "90°" output, the first set of filters (belonging to output channel 0, and showed on the chart), has to output "-1", the other set - "+1". 
+
+To me, after I've done all of that, the question remained, how the filter would output these 4 pixels, that after averaging would become the decisive "-1" and "+1". For that I wrote another script, which illustrates the behavior of a filter. Let's take a look at its output first:
+
+![filters_n_1_marks](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filters_n_1_marks.png)
+
+It illustrates the work of one of filters in the second convolution layer. We got a text description in the top left corner, it shows which one of the 8 filters we're looking at. Right below it, marked "Original" - is the input image before pooling; and the one to the right ("Src") is the same image after pooling. 
+
+As we know, to apply a filter means to multiply the filter by the parts of the image, marked by different colors on the plot. These parts of the image, multiplied by the filter, are marked "Out 1" to "Out 4". After the multiplication, the values of each "Out" are summed up to form 4 single values in total (or image 2x2). This will be the output for a single filter, but for the convolution layer we have four filters, their outputs are summed up. This will be a single channel output from the convolution and denoted in the plot above as "Output", in the lower left corner.
+
+So how is this connected to our example. In order for the first channel output the "-1" - all the four filters with "Filter out idx: 0" have to output a large negative value (remember we have a tanh non-linearity, so the large negative will be converted to -1). Well, not all of them, but mostly, on average.
+
+And, how would a single filter output a large negative value? For that we need to take a look at the numbers themselves. Interpretation of the numbers is also straightforward: These are only multiplications of these image parts by the filter values:
+
+![filters_n_1_nums](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filters_n_1_nums.png)
+
+However, you may want to take a second to figure out which number goes where (use the previous plot for reference).
+
+Let's think about what we see here. First of all, the filter zeroes out most of the values in the middle, leaving mostly top right and bottom left. This means that these top right and bottom left parts of the image actually affect the filter output, obviously. Second is, this filter "likes" when the top right values are negative and bottom left are positive. In this case the filter outputs larger value. If our image had positive values both at the top right and bottom left - they would cancel out, which means that the filter wouldn't care about them (remember that after the filter is applied, its outputs will sum up).
+
+ Let's look at another filter operation:
+
+![filters_num_2](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filters_num_2.png)
+
+This filter also does not pay much attention to center pixels, mostly edge pixels affect its output. For our example, when the image is open at 150-ish degrees, its right and bottom edges are darker, compared to the bottom and right, so such filter would output something rather negative.
+
+Now assume we understand how the "Output" matrix is formed. The average value of this matrix would be the first input to our dense network. If we remind ourselves of how the dense network work, we may connect the filters output to the "Grand output" - output of the whole network. So, if all the filters output a positive value, the network tend to output "Large Sin, zero Cos". If some filters output positive value, others negative, in such manner that they compensate each other - the network will output zero for both Sin and Cos, which should never happen, theoretically.
+
+Next I will describe the script for obtaining these visualization, so that you can reproduce them and play with it yourself. But before it, one small point to mention.
+
+### 5.3 More values from inside
+
+We are going explore our model even further. We want to see an image before convolution, after it, and after pooling. For that, we need to change the second parameter for the forward() function:
 
 ```python
     def forward(self, x, out_layer=-1):
@@ -1841,41 +1885,9 @@ We may explore the network operation even further. For example, we want to see a
 
 The default value for the parameter (-1) is something invalid, so that the model works from the beginning to the end, unless specified otherwise.
 
-### 4.6 All together
+### 5.4 The illustration code
 
-The chart below shows briefly the overall operation of the network:
-
-![filter_chain_expanded](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filter_chain_expanded.png)
-
-So we have an input image, it is passed through a set of 4 filters (Filter 1 on the chart, or conv1 in our network). This gives us 4 filtered images, which are then passed through another set of filters Filter 2. Since our conv2 layer gives 2 output channels, it has 8 filters in total. The chart shows only 4, belonging to the first out channel. The output of these 4 filters gets summed up, because this is how the convolution layer work. After that we get a 2x2 image, 4 pixels total. The average pooling simply takes the average of those pixels, yielding a single number. This number becomes one of the inputs to the dense network.
-
-Now that things are getting a bit complicated, let's take an example and try to find what led the network to such result.
-
-So, say our network outputs a "90°" prediction for an image. For that, the cos output should be close to "+1", the sin output - to "0". Take a look again at the dense network plots above. We get such result when the convolutions output is close to (-1, +1). 
-
-To get the "90°" output, the first set of filters (belonging to output channel 1, and showed on the chart), has to output "-1", the other set - "+1". 
-
-To me, after I've done all of that, the question remained, how the filter would output these 4 pixels, that after averaging would become the decisive "-1" and "+1". For that I wrote another script, which illustrates the behaviour of a filter. Let's take a look at its output first:
-
-![filters_n_1_marks](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filters_n_1_marks.png)
-
-
-
-
-
-
-
-
-
-
-
-
-
-The process of getting this 2x2 image may stay under question, so I wrote a script to shed a light on it. The script illustrates how an actual filter is applied.
-
-First of all, the script will draw the inputs and outputs for the filter, but it will also write a number ontop of every pixel, so that we can see the actual value. Second, it will split the image into parts (since the filter is multiplied by a part of an image) show each sub-image, multiplied by the filter. 
-
-We start with a function that draws an image with numerical values. To test it, we print our input image. But since the image has  too many pixels, the text ontop merges and we see nothing. So I plotted a fraction of this image nearby:
+First of all, the script will draw the matrices, like inputs and outputs for the filter, but it will also write a number ontop of every pixel, so that we can see the actual value. So we start by writing a function for it:
 
 ```python
 import numpy as np
@@ -1910,13 +1922,15 @@ show_matrix(img[5:15, 5:15], ax[1])
 plt.show()
 ```
 
+To test it, we print our input image. But since the image has  too many pixels, the text ontop merges and we see nothing. So I plotted a fraction of this image nearby.
+
 The code should produce the following image:
 
 ![numerical_input](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\numerical_input.png)
 
 The image is the same input as on the previous plot. The right image is a zoomed-in version of the left one.
 
-Next we add a function that shows some analysis. It will show a text description, such as filter 'in' and 'out' indices, so that the whole image makes sense later. Then it will show our input image and the filter we're applying. After that it will illustrate the convolution process itself, we'll get to it. We will have 9 images overall, organized in a 3x3 grid. Let's start by showing description, input and filter.
+Next we add a function that shows actual plots. We will have 9 images overall, organized in a 3x3 grid. Let's start by showing description, input and filter.
 
 ```python
 def illustrate(model, img, filter_in_idx, filter_out_idx):
@@ -1985,7 +1999,7 @@ def illustrate(model, img, filter_in_idx, filter_out_idx):
     plt.show()
 ```
 
-Note that I've added an empty string as a text field for the Original image, so that the number are not written. This would overwhelm the image.
+Note that I've added an empty string as a text field for the Original image, so that the number are not written, this would overwhelm the image.
 
 Now it's time to add the convolution function. It will accept an image and a filter, like regular convolution. It will split the image input pieces sized same as the filter (7x7 in our case), and multiply by the filter. 
 
@@ -2052,25 +2066,7 @@ The code will output something like this:
 
 ![filters_num_1](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filters_n_1.png)
 
-So, what the network does, is fairly straightforward, it just has lot of images. Let's have a closer look at the image above. "Src" is "Original" after pooling and nonlinearity. Each of "Out X" images are parts of the "Src":
-
-![filters_num_1_marks](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filters_n_1_marks.png)
-
-Interpretation of the number themselves is also straightforward: These are only multiplications of these image parts by the filter values:
-
-![filters_n_1_nums](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filters_n_1_nums.png)
-
-However, you may want to take a second to figure out which number goes where (use the previous plot for reference).
-
-Let's think about what we see here. First of all, the filter zeroes out most of the values in the middle, leaving mostly top right and bottom left. This means that these top right and bottom left parts of the image actually affect the filter output, obviously. Second is, this filter "likes" when the top right values are negative and bottom left are positive. In this case the filter outputs larger value. If our image had positive values both at the top right and bottom left - they would cancel out, which means that the filter wouldn't care about them (remember that after the filter is applied, its outputs will sum up).
-
-The output of this filter will sum up with the outputs of other filters, to form the "Output" matrix. Let's look at another filter operation:
-
-![filters_num_2](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filters_num_2.png)
-
-This filter also does not pay much attention to center pixels, mostly edge pixels affect its output. For our example, when the image is open at 150-ish degrees, its right and bottom edges are darker, compared to the bottom and right, so such filter would output something rather negative.
-
-Now assume we understand how the "Output" matrix is formed (there is such matrix for every 'filter_out_idx'). The average value of this matrix would be the first input to our dense network. If we remind ourselves of how the dense network work, we may connect the filters output to the "Grand output" - output of the whole network. So, if all the filters output a positive value, the network tend to output "Large Sin, zero Cos". If some filters output positive value, others negative, in such manner that they compensate each other - the network will output zero for both Sin and Cos, which should never happen, theoretically.
+Arrgh, this was a tough section. But I believe this is a must-have, because it would lead us to understanding the process, which would allow us apply it to the real data. We will do it in the next section.
 
 ##  5. Real data
 
