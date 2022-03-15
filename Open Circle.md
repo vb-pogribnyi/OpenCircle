@@ -1,4 +1,6 @@
-# Open Circle
+# CNN Intermediate
+
+Bigger than linear regression, but simpler than MNIST
 
 ## Introduction
 
@@ -6,7 +8,7 @@ We all know that convolutional neural networks are superior for processing image
 
 ![dataset_sample](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\01_dataset\dataset_sample.png)
 
-But how does it actually do it? Theoretically, I may generate a synthetic dataset, train the network, then apply to a real data like this (I've drown these myself with a pencil):
+But how does it actually do it? Theoretically, I may generate a synthetic dataset, train the network, then apply it to real data like this (I've drawn these myself with a pencil):
 
 ![real_sample](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\05_real\real_sample.png)
 
@@ -1766,9 +1768,11 @@ This looks much better. All the filters are symmetric, and the pattern  is clear
 
 ## 5. Breakdown
 
+This section aims to illustrate how the different parts of the model work.
+
 ### 5.1 Dense layers
 
-For illustration purposes we will take the simplest network configuration: 2 inputs, 2 outputs, 2 hidden nodes. Note that we don't have to account for the hidden nodes. We may only plot the very output vs the input. So there will be 2 plots for each of the outputs. The 2 inputs will be denoted as x and y, the output - as color. The inputs values vary between -1 and 1, since the activation on the previous layer is tanh. Here's what it looks like in code:
+We will take the simplest network configuration for illustration purposes: 2 inputs, 2 outputs, and 2 hidden nodes. Note that we don't have to account for the hidden nodes. We may only plot the very output vs the input. So there will be 2 plots, one for each of the outputs. The 2 inputs will be denoted as x and y, the output - as color. The input values vary between -1 and 1, since the activation on the previous layer is tanh. Here's what it looks like in code:
 
 ```python
 import os
@@ -1805,7 +1809,7 @@ if __name__ == '__main__':
         show_dense(model)
 ```
 
-Note that here I'm setting that model weights for which I want to print the data (LargeWin_4_2_2_3_2_7_7_wd). This code will output the following image:
+Note that here I'm setting the model weights for which I want to print the data (LargeWin_4_2_2_3_2_7_7_wd). This code will output the following image:
 
 ![dense_2](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\dense_2.png)
 
@@ -1817,45 +1821,45 @@ The chart below shows briefly the overall operation of the network:
 
 ![filter_chain_expanded](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filter_chain_expanded.png)
 
-So we have an input image, it is passed through a set of 4 filters (Filter 1 on the chart, or conv1 in our network). This gives us 4 filtered images, which are then passed through another set of filters Filter 2. Since our conv2 layer gives 2 output channels, it has 8 filters in total. The chart shows only 4, belonging to the first out channel. The output of these 4 filters gets summed up, because this is how the convolution layer work. After that we get a 2x2 image, 4 pixels total. The average pooling simply takes the average of those pixels, yielding a single number. This number becomes one of the inputs to the dense network.
+So we have an input image, it is first passed through a set of 4 filters (Filter 1 on the chart, or conv1 in our network). This gives us 4 filtered images, which are then passed through another set of filters Filter 2. Since our conv2 layer gives 2 output channels, it has 8 filters in total. The chart shows only 4, belonging to the first out channel. The output of these 4 filters gets summed up, because this is how the convolution layer works. After that we get a 2x2 image, 4 pixels total. The average pooling simply takes the average of those pixels, yielding a single number. This number becomes one of the inputs to the dense network.
 
-Now that things are getting a bit complicated, let's take an example and try to find what led the network to such result.
+Now that things are getting a bit complicated, let's take an example and try to find what led the network to such a result.
 
-So, say our network outputs a "90°" prediction for an image. For that, the cos output should be close to "+1", the sin output - to "0". Take a look again at the dense network plots above. We get such result when the convolutions output is close to (-1, +1). 
+So, say our network outputs a "90°" prediction for an image. For that, the cos output should be close to "+1", the sin output - to "0". Take a look again at the dense network plots above. We get such a result when the output of the convolution is close to (-1, +1). 
 
 To get the "90°" output, the first set of filters (belonging to output channel 0, and showed on the chart), has to output "-1", the other set - "+1". 
 
-To me, after I've done all of that, the question remained, how the filter would output these 4 pixels, that after averaging would become the decisive "-1" and "+1". For that I wrote another script, which illustrates the behavior of a filter. Let's take a look at its output first:
+To me, after I've done all of that, the question remained, how the filter would output these 4 pixels, that after averaging would become the decisive "-1" and "+1". For that, I wrote another script, which illustrates the behavior of a filter. Let's take a look at its output first:
 
 ![filters_n_1_marks](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filters_n_1_marks.png)
 
-It illustrates the work of one of filters in the second convolution layer. We got a text description in the top left corner, it shows which one of the 8 filters we're looking at. Right below it, marked "Original" - is the input image before pooling; and the one to the right ("Src") is the same image after pooling. 
+It illustrates the work of one of the filters in the second convolution layer. We got a text description in the top left corner, it shows which one of the 8 filters we're looking at. Right below it, marked "Original" - is the input image before pooling; and the one to the right ("Src") is the same image after pooling. 
 
-As we know, to apply a filter means to multiply the filter by the parts of the image, marked by different colors on the plot. These parts of the image, multiplied by the filter, are marked "Out 1" to "Out 4". After the multiplication, the values of each "Out" are summed up to form 4 single values in total (or image 2x2). This will be the output for a single filter, but for the convolution layer we have four filters, their outputs are summed up. This will be a single channel output from the convolution and denoted in the plot above as "Output", in the lower left corner.
+As we know, to apply a filter means to multiply the filter by the parts of the image, marked by different colors on the plot. These parts of the image, multiplied by the filter, are marked "Out 1" to "Out 4". After the multiplication, the values of each "Out" are summed up to form 4 single values in total (or image 2x2). This will be the output for a single filter, but for the convolution layer we have four filters, and their outputs are summed up. This will be a single channel output from the convolution and denoted in the plot above as "Output", in the lower-left corner.
 
-So how is this connected to our example. In order for the first channel output the "-1" - all the four filters with "Filter out idx: 0" have to output a large negative value (remember we have a tanh non-linearity, so the large negative will be converted to -1). Well, not all of them, but mostly, on average.
+So how is this connected to our example? In order for the first channel to output the "-1" - all the four filters with "Filter out idx: 0" have to output a large negative value (remember we have a tanh non-linearity, so the large negative will be converted to -1). Well, not all of them, but mostly, on average.
 
-And, how would a single filter output a large negative value? For that we need to take a look at the numbers themselves. Interpretation of the numbers is also straightforward: These are only multiplications of these image parts by the filter values:
+And, how would a single filter output a large negative value? For that, we need to take a look at the numbers themselves. Interpretation of the numbers is also straightforward: These are only multiplications of these image parts by the filter values:
 
 ![filters_n_1_nums](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filters_n_1_nums.png)
 
 However, you may want to take a second to figure out which number goes where (use the previous plot for reference).
 
-Let's think about what we see here. First of all, the filter zeroes out most of the values in the middle, leaving mostly top right and bottom left. This means that these top right and bottom left parts of the image actually affect the filter output, obviously. Second is, this filter "likes" when the top right values are negative and bottom left are positive. In this case the filter outputs larger value. If our image had positive values both at the top right and bottom left - they would cancel out, which means that the filter wouldn't care about them (remember that after the filter is applied, its outputs will sum up).
+Let's think about what we see here. First of all, the filter zeroes out most of the values in the middle, leaving mostly top right and bottom left. This means that these top right and bottom left parts of the image actually affect the filter output, obviously. The second is, this filter "likes" when the top right values are negative and the bottom left are positive. In this case, the filter outputs a larger value. If our image had positive values both at the top right and bottom left - they would cancel out, which means that the filter wouldn't care about them (remember that after the filter is applied, its outputs will sum up).
 
  Let's look at another filter operation:
 
 ![filters_num_2](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filters_num_2.png)
 
-This filter also does not pay much attention to center pixels, mostly edge pixels affect its output. For our example, when the image is open at 150-ish degrees, its right and bottom edges are darker, compared to the bottom and right, so such filter would output something rather negative.
+This filter also does not pay much attention to the center pixels, mostly edge pixels affect its output. For our example, when the image is open at 150-ish degrees, its right and bottom edges are darker, compared to the bottom and right, so such filter would output something rather negative.
 
-Now assume we understand how the "Output" matrix is formed. The average value of this matrix would be the first input to our dense network. If we remind ourselves of how the dense network work, we may connect the filters output to the "Grand output" - output of the whole network. So, if all the filters output a positive value, the network tend to output "Large Sin, zero Cos". If some filters output positive value, others negative, in such manner that they compensate each other - the network will output zero for both Sin and Cos, which should never happen, theoretically.
+Now assume that we understand how the "Output" matrix is formed. The average value of this matrix would be the first input to our dense network. If we remind ourselves of how the dense network work, we may connect the filters output to the "Grand output" - output of the whole network. So, if all the filters output a positive value, the network tends to output "Large Sin, zero Cos". If some filters output positive value, others negative, in such a manner that they compensate each other - the network will output zero for both Sin and Cos, which should never happen, theoretically.
 
-Next I will describe the script for obtaining these visualization, so that you can reproduce them and play with it yourself. But before it, one small point to mention.
+Next, I will describe the script for obtaining this visualization, so that you can reproduce them and play with it yourself. But before it, one small point to mention.
 
 ### 5.3 More values from inside
 
-We are going explore our model even further. We want to see an image before convolution, after it, and after pooling. For that, we need to change the second parameter for the forward() function:
+We are going to explore our model even further. We want to see an image before convolution, after it, and after pooling. For that, we need to change the second parameter for the forward() function:
 
 ```python
     def forward(self, x, out_layer=-1):
@@ -1922,7 +1926,7 @@ show_matrix(img[5:15, 5:15], ax[1])
 plt.show()
 ```
 
-To test it, we print our input image. But since the image has  too many pixels, the text ontop merges and we see nothing. So I plotted a fraction of this image nearby.
+To test it, we print our input image. But since the image has too many pixels, the text ontop merges and we see nothing. So I plotted a fraction of this image nearby.
 
 The code should produce the following image:
 
@@ -1999,9 +2003,9 @@ def illustrate(model, img, filter_in_idx, filter_out_idx):
     plt.show()
 ```
 
-Note that I've added an empty string as a text field for the Original image, so that the number are not written, this would overwhelm the image.
+Note that I've added an empty string as a text field for the Original image, so that the numbers are not written, this would overwhelm the image.
 
-Now it's time to add the convolution function. It will accept an image and a filter, like regular convolution. It will split the image input pieces sized same as the filter (7x7 in our case), and multiply by the filter. 
+Now it's time to add the convolution function. It will accept an image and a filter, like regular convolution. It will split the image input pieces sized the same as the filter (7x7 in our case), and multiply by the filter. 
 
 ```python
 def convolve(arr, filter):
@@ -2020,7 +2024,7 @@ def convolve(arr, filter):
     return result
 ```
 
-Since the second layer input is 8x8, the filter will be applied to 4 sub-images, and the function will return an array 2x2. Note that 'conv_item * filter' will return a matrix where every element of conv_item is multiplied by respective element of filter.
+Since the second layer input is 8x8, the filter will be applied to 4 sub-images, and the function will return an array of 2x2. Note that 'conv_item * filter' will return a matrix where every element of conv_item is multiplied by the respective element of the filter.
 
 When the function is ready, we may plot its values in 'illustrate()':
 
@@ -2066,7 +2070,7 @@ The code will output something like this:
 
 ![filters_num_1](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filters_n_1.png)
 
-Arrgh, this was a tough section. But I believe this is a must-have, because it would lead us to understanding the process, which would allow us apply it to the real data. We will do it in the next section.
+Ugh, this was a tough section. But I believe this is a must-have, because it would lead us to understanding of the process, which would allow us to apply it to the real data. We will do it in the next section.
 
 ##  5. Real data
 
@@ -2082,7 +2086,7 @@ Then cut it in a drawing software into pieces that remind our dataset:
 
 ![02](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\05_real\01.png)
 
-Now there are a couple of problems that prevent us from feeding this through the model. First, this image is too large and has to be scaled down to 30x30. Second, this image is not square, so we need to crop it first.
+Now there are a couple of problems that prevent us from feeding this directly into the model. First, this image is too large and has to be scaled down to 30x30. Second, this image is not square, so we need to crop it first.
 
 Let's write a script that does it for us:
 
@@ -2107,7 +2111,7 @@ if __name__ == '__main__':
         plt.show()
 ```
 
-The code suggests that all the images we cut by hand should be in a folder called 'data_real'. OpenCV reads images as an array of integers with values in range 0-255. Since our network accepts arrays with values 0-1 - we also have to convert the images to floats and normalize it, by subtracting min value from each image and dividing by max value. Also since on our images the circle is black-on-white, and in the dataset the circle is white-on-black, we end our preprocessing with line 'img = 1 - img', which inverts the image.
+The code suggests that all the images we cut by hand should be in a folder called 'data_real'. OpenCV reads images as an array of integers with values in range 0-255. Since our network accepts arrays with values 0-1 - we also have to convert the images to floats and normalize it, by subtracting min value from each image and dividing by max value. Also since on our images the circle is black-on-white, and in the dataset the circle is white-on-black, we end our preprocessing with the line 'img = 1 - img', which inverts the image.
 
 Here's an example of what the code should output:
 
@@ -2115,7 +2119,7 @@ Here's an example of what the code should output:
 
 There is some inconsistency between OpenCV and Matplotlib for y-axis, so the image looks flipped vertically. This is the same image as on the plot above.
 
-Now given the data, we can transform it into PyTorch-friendly dataloader and run it through our model. To run it through the model, we'll use our function from eval algorithm, which accepts a model and a dataloader. This seems perfect, except this function accepts a dataset which also includes labels, which we don't have for our simulated data. Well that's not a problem, we can substitute the real labels with empty (zeros) tensor. Here's how the updated code looks like:
+Now given the data, we can transform it into PyTorch-friendly dataloader and run it through our model. To run it through the model, we'll use our function from eval algorithm, which accepts a model and a dataloader. This seems ok, except this function accepts a dataset which also includes labels, which we don't have for our real data. Well that's not a problem, we can substitute the real labels with empty (zeros) tensor. Here's how the updated code looks like:
 
 ```python
 import os
@@ -2163,7 +2167,7 @@ While running the code, it failed right away for me:
 
 ![im_02_pred](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\05_real\im_02_pred.png)
 
-It predicts completely wrong direction (which is by the way not the case for all the images). So we have a chance to investigate this case.
+It predicts a completely wrong direction (which is by the way not the case for all the images). So we have a chance to investigate this case.
 
 ### 5.2 Investigation
 
@@ -2190,7 +2194,7 @@ After some thinking and reminding myself how this system should work, I figured 
 
 ![03_filt_num_scheme](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\05_real\03_filt_num_scheme.png)
 
-The image is contained mostly in the central pixels, but the filter used edge pixels to make the decision. So the easy fix was to cut the real image even more, so that edge pixels after convolution would contain information:
+The image is contained mostly in the central pixels, but the filter used the edge pixels to make the decision. So the easy fix was to cut the real image even more, so that edge pixels after convolution would contain information:
 
 ![01_c](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\05_real\01_c.png)
 
@@ -2198,7 +2202,7 @@ The evaluation code gave much better result this time:
 
 ![im_02_pred_c](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\05_real\im_02_pred_c.png)
 
-But easy solution is a bit boring, isn't it? A much better solution would be to make the filter care about the center pixels. To do so, we might include this case into the training set (by which I mean to include smaller circles shifted to a side of the image). After training the network, we may hope that our real images will be recognized more easily.
+But an easy solution is a bit boring, isn't it? A much better solution would be to make the filter care about the center pixels. To do so, we might include this case into the training set (by which I mean to include smaller circles shifted to a side of the image). After training the network, we may hope that our real images will be recognized a lot better.
 
 ### 5.6 The fix
 
@@ -2235,7 +2239,7 @@ After that, I will decide how much I want to shift it:
         )
 ```
 
-Here I initialize the shift value to zero, then if my image is scaled to less than 0.5 times - I will change the shift values. The magnitude of this change will be maximum shift_thresh - scale_y, at both sides. This will ensure that the whole information stays inside the image.
+Here I initialize the shift value to zero, then if my image is scaled to less than 0.5 times its original size - I will change the shift values. The magnitude of this change will be at most "shift_thresh - scale_y", at both sides. This will ensure that the whole information stays inside the image.
 
 Now we have to apply this shift. Here we have to note that there is a rotation transform, and the shift has to be applied after the rotation. Otherwise the image will be rotated not around the center of the circle (but around the center of the image, which is away from the circle). 
 
@@ -2296,11 +2300,11 @@ Here's what the evaluation script outputs with the newly trained model:
 
 ![im_03_pred](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\05_real\im_03_pred.png)
 
-Overall, I'm happy with the model performance. I think I'm ready to leave it like it is.
+Overall, I'm happy with the model performance. I think I'm ready to leave it as it is.
 
 ## Ourto
 
-This article does not cover many topics it may have covered. For example, operation of the first convolution layer. Or the connection between the second convolution and actual output may be described in more detail. A research of other architectures and their comparison may have been done. But this article is already too large, so I'm afraid someone else will have to cover these topics (maybe me, but later).
+This article does not cover many topics it may have covered. For example, operation of the first convolution layer. Or the connection between the second convolution and the ultimate output may be described in more detail. A research of other architectures and their comparison may have been done. But this article is already too large, so I'm afraid I'll have to leave it as it is (at least for now).
 
 This article was meant to give the readers better understanding of the neural network operation, a simple example of research and debugging. Hope it did well.
 
