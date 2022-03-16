@@ -1,4 +1,4 @@
-# CNN Intermediate
+# CNN Intermediate - OpenCircle
 
 Bigger than linear regression, but simpler than MNIST
 
@@ -1547,9 +1547,9 @@ I won't run the training again, yet. First we need to take a look at the trained
 
 ### 4.3 Convolution filters
 
-Now that we know that our models are working, let's find out how do they work. We start with the convolutions. And since the convolutions are composed of filters, we may show the image after each filter is applied. So for example if we have a convolution layer with 4 filters an one channel input image, we want to see 4 images: each of the filters applied to the image. If we have 2 channels input - we will get 8 images: each of the filters applied to each of the layers of the image.
+Now that we know that our model is working, let's find out how does it work. We start with the convolutions. And since the convolutions are composed of filters, the easy way to show its operation would be to show the image after each filter is applied. For example, if we have a convolution layer with 4 filters and one channel input image, we want to see 4 images: each of the filters applied to the image. If we have 2 channels input - we will get 8 images: each of the filters applied to each of the layers of the image.
 
-We'll need a plotting tool for that, obviously. But apart from that, we will need to make changes to the models script, to enable intermediate output (output of the first layer, for example). Second, some code organization. Our load_from_file() function we used earlier for evaluation, will be needed here as well, so I will move it to the models file.
+We'll need a plotting tool for that. But apart from that, we will need to make changes to the model's script, to enable intermediate output (output of the first layer, for example). Second, some code organization. Our load_from_file() function we used earlier for evaluation, will be needed here as well, so I will move it to the model's file.
 
 To enable the model's intermediate output, we will add a new parameter to its forward() function. Then inside the function, we check the parameter for early output:
 
@@ -1604,7 +1604,7 @@ for f in os.scandir('models'):
     show_weight(model.conv2.weight, model(t_img, 1)[0])
 ```
 
-Here we are generating an image (setting a seed for np.random, so that the image is same), loading a model, passing the image through the model, and plotting the information. The source image for all the illustrations below looks like this:
+Here we are generating an image (setting seed for np.random, so that the image is the same), loading a model, passing the image through the model, and plotting the information. The source image for all the illustrations below looks like this:
 
 ![src](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\src.png)
 
@@ -1645,7 +1645,7 @@ For the first layer (above), and the second layer below:
 
 ![filters_2](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filters_2.png)
 
-The last row shows the output of the layer, while the first rows show the filters applied to the previous layer output. For the first layer we see some kind of pattern for filter, and its output looks meaningful. But for the second filter, both filter weights and output look like complete noise, which is a good sign of overfitting. To deal with this, we may use some regularization technique, like L2 regularization. To do that, in PyTorch, we need to add a weight_decay parameter for optimizer:
+The last row shows the output of the layer, while the first rows show the filters applied to the previous layer output. For the first layer, we see some kind of pattern for the filter, and its output looks meaningful. But for the second filter, both filter weights and output look like complete noise, which is a good sign of overfitting. To deal with this, we may use some regularization techniques, like L2 regularization. To do that, in PyTorch, we need to add a weight_decay parameter for optimizer:
 
 ```python
 opt = torch.optim.Adam(model.parameters())
@@ -1656,7 +1656,7 @@ opt = torch.optim.Adam(
 )
 ```
 
-After that, we need to train our models again. Luckily, we have found which parameters correlate most with the loss, so this training will take much less time. I have created other training script, similar to the first one, but included all the changes so far:
+After that, we need to train our models again. Luckily, we have found which parameters correlate most with the loss, so this training will take much less time. I have created another training script, similar to the first one, but included all the changes so far:
 
 ```python
 import os
@@ -1764,7 +1764,7 @@ Another model:
 
 ![filters_32](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\filters_32.png)
 
-This looks much better. All the filters are symmetric, and the pattern  is clear. We can move on to exploring the dense network part.
+This looks much better. All the filters are symmetric, and the pattern is clear. We can move on to exploring the dense network part.
 
 ## 5. Breakdown
 
@@ -2074,11 +2074,11 @@ Ugh, this was a tough section. But I believe this is a must-have, because it wou
 
 ##  5. Real data
 
-Any ML model is useless without application to a real application (or real data). Usefulness of this particular model is still questionable, but it's still nice to know that it works for the real data.
+Any ML model is useless without application to a real application (or real data). The usefulness of this particular model is still questionable, but it's still nice to know that it works for real data.
 
 ### 5.1 Evaluation
 
-To collect the data for testing, I draw a couple of open circles on a paper and took a photo of it:
+To collect the data for testing, I draw a couple of open circles on paper and took a photo of them:
 
 ![img_real](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\05_real\img_real.jpg)
 
@@ -2111,15 +2111,15 @@ if __name__ == '__main__':
         plt.show()
 ```
 
-The code suggests that all the images we cut by hand should be in a folder called 'data_real'. OpenCV reads images as an array of integers with values in range 0-255. Since our network accepts arrays with values 0-1 - we also have to convert the images to floats and normalize it, by subtracting min value from each image and dividing by max value. Also since on our images the circle is black-on-white, and in the dataset the circle is white-on-black, we end our preprocessing with the line 'img = 1 - img', which inverts the image.
+The code suggests that all the images we cut by hand should be in a folder called 'data_real'. OpenCV reads images as an array of integers with values in the range of 0-255. Since our network accepts arrays with values 0-1 - we also have to convert the images to floats and normalize them, by subtracting min value from each image and dividing it by max value. Also since on our images, the circle is black-on-white, and in the dataset the circle is white-on-black, we end our preprocessing with the line 'img = 1 - img', which inverts the image.
 
 Here's an example of what the code should output:
 
 ![03](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\05_real\im_02.png)
 
-There is some inconsistency between OpenCV and Matplotlib for y-axis, so the image looks flipped vertically. This is the same image as on the plot above.
+There is some inconsistency between OpenCV and Matplotlib for the y-axis, so the image looks flipped vertically. This is the same image as in the plot above.
 
-Now given the data, we can transform it into PyTorch-friendly dataloader and run it through our model. To run it through the model, we'll use our function from eval algorithm, which accepts a model and a dataloader. This seems ok, except this function accepts a dataset which also includes labels, which we don't have for our real data. Well that's not a problem, we can substitute the real labels with empty (zeros) tensor. Here's how the updated code looks like:
+Now given the data, we can transform it into a PyTorch-friendly dataloader and run it through our model. To run it through the model, we'll use our function from the eval algorithm, which accepts a model and a dataloader. This seems ok, except this function accepts a dataset that also includes labels, which we don't have for our real data. Well that's not a problem, we can substitute the real labels with empty (zeros) tensor. Here's what the updated code looks like:
 
 ```python
 import os
@@ -2171,7 +2171,7 @@ It predicts a completely wrong direction (which is by the way not the case for a
 
 ### 5.2 Investigation
 
-The easiest part to start is to take a look at the output of the second convolution layer, through the tool we made previously. I only had to replace the part which generates a random image with the code that reads actual image:
+The easiest part to start is to take a look at the output of the second convolution layer, through the tool we made previously. I only had to replace the part which generates a random image with the code that reads the actual image:
 
 ```python
 # np.random.seed(42)
@@ -2194,7 +2194,7 @@ After some thinking and reminding myself how this system should work, I figured 
 
 ![03_filt_num_scheme](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\05_real\03_filt_num_scheme.png)
 
-The image is contained mostly in the central pixels, but the filter used the edge pixels to make the decision. So the easy fix was to cut the real image even more, so that edge pixels after convolution would contain information:
+The image is contained mostly in the central pixels, but the filter used the edge pixels to make the decision. So the easy fix was to cut the real image even more, so those edge pixels after convolution would contain information:
 
 ![01_c](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\05_real\01_c.png)
 
@@ -2206,7 +2206,7 @@ But an easy solution is a bit boring, isn't it? A much better solution would be 
 
 ### 5.6 The fix
 
-So, the plan is to shift the image. But we don't want to shift it too much, so that the point at which the circle is open would remain on the image. Otherwise the network simply will not train. So we want to shift the image only if it is small enough. 
+So, the plan is to shift the image. But we don't want to shift it too much, so that the point at which the circle is open would remain on the image. Otherwise, the network simply will not train. So we want to shift the image only if it is small enough. 
 
 The part I will be changing is the generate_image() function. The part where the image is being scaled:
 
@@ -2241,7 +2241,7 @@ After that, I will decide how much I want to shift it:
 
 Here I initialize the shift value to zero, then if my image is scaled to less than 0.5 times its original size - I will change the shift values. The magnitude of this change will be at most "shift_thresh - scale_y", at both sides. This will ensure that the whole information stays inside the image.
 
-Now we have to apply this shift. Here we have to note that there is a rotation transform, and the shift has to be applied after the rotation. Otherwise the image will be rotated not around the center of the circle (but around the center of the image, which is away from the circle). 
+Now before we apply this shift, note that there is a rotation transform, and the shift has to be applied after the rotation. Otherwise, the image will be rotated not around the center of the circle (but around the center of the image, which is away from the circle). 
 
 So, here's what the new function looks like:
 
@@ -2286,7 +2286,7 @@ Be careful not to overestimate the 'shift_thresh' value. If it is too large, som
 
 ### 5.7 The result
 
-After training the network I got significantly better result. The second convolution filters started paying attention to the central pixels, and all the real images were recognized (more or less) correctly.
+After training the network I got a significantly better result. The second convolution filters started paying attention to the central pixels, and all the real images were recognized (more or less) correctly.
 
 Here is the image of the weights after training:
 
@@ -2294,18 +2294,18 @@ Here is the image of the weights after training:
 
 ![fixed_l2](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\05_real\fixed_l2.png)
 
-These are the filters for the first and second convolutions along with the output for the same real image I used before. The filters have remarkably better filling of the central pixels.  
+These are the filters for the first and second convolutions along with the output for the same real image I used before. The filters have a remarkably better filling of the central pixels.  
 
 Here's what the evaluation script outputs with the newly trained model:
 
 ![im_03_pred](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\05_real\im_03_pred.png)
 
-Overall, I'm happy with the model performance. I think I'm ready to leave it as it is.
+Overall, I'm happy with the model's performance. I think I'm ready to leave it as it is.
 
 ## Ourto
 
-This article does not cover many topics it may have covered. For example, operation of the first convolution layer. Or the connection between the second convolution and the ultimate output may be described in more detail. A research of other architectures and their comparison may have been done. But this article is already too large, so I'm afraid I'll have to leave it as it is (at least for now).
+This article does not cover many topics it may have covered. For example, the operation of the first convolution layer. Or the connection between the second convolution and the ultimate output may be described in more detail. Research of other architectures and their comparison may have been done. But this article is already too large, so I'm afraid I'll have to leave it as it is (at least for now).
 
-This article was meant to give the readers better understanding of the neural network operation, a simple example of research and debugging. Hope it did well.
+This article was meant to give the readers a better understanding of the neural network operation, a simple example of research and debugging. Hope it did well.
 
 Good luck and happy coding! 
