@@ -1048,7 +1048,7 @@ class LargeWin(torch.nn.Module):
         return x
 ```
 
-I'm passing the parameters here as a dict, so that it will be easier to automate testing later on. Among the parameters there are: ch1, ch2 - number of filters for the convolutions. Ch3 - number of hidden neurons for the dense network. Pool1_size and pool2_size - sizes of the pooling layers after the convolutions. Ks1 and ks2 - convolutions kernel sizes. 
+I'm passing the parameters here as a dict, so that it will be easier to automate testing later on. Among the parameters, there are ch1, ch2 - number of filters for the convolutions. Ch3 - number of hidden neurons for the dense network. Pool1_size and pool2_size - sizes of the pooling layers after the convolutions. Ks1 and ks2 - convolutions kernel sizes. 
 
 Let's now add the network layers. Note that dense layer input size (after flattening) will depend on the size of kernels and pooling windows. It will be calculated in the model constructor as ch_in:
 
@@ -1068,7 +1068,7 @@ Let's now add the network layers. Note that dense layer input size (after flatte
 
 Here I'm ignoring the cases where the number of inputs is larger than 4, because it will be harder to visualize.
 
-The forward() method calls the layers one by one, adding poolings and nonlinearities between them. Here is how the full code for the model looks like:
+The forward() method calls the layers one by one, adding poolings and nonlinearities between them. Here is what the full code for the model looks like:
 
 ```python
 import torch
@@ -1114,7 +1114,7 @@ class LargeWin(torch.nn.Module):
 
 ### 2.2 Testing the model
 
-Okay, this was a lot of code and we did not run it yet. Let's fix this now. We'll create a main function, that will run a sample input through the model. But first we need to generate this sample, so let's import our generate_dataset.py:
+Okay, this was a lot of code and we did not run it yet. Let's fix this now. We'll create the main function, that will run a sample input through the model. But first we need to generate this sample, so let's import our generate_dataset.py:
 
 ```python
 from generate_dataset import generate_image
@@ -1141,7 +1141,7 @@ if __name__ == '__main__':
     })
 ```
 
-Next we'll run the image through the model, but first we need to convert it to a tensor, and make it right shape (add examples and channels dimensions):
+Next we'll run the image through the model, but first we need to convert it to a tensor and make it the right shape (add examples and channels dimensions):
 
 ```python
 if __name__ == '__main__':
@@ -1370,7 +1370,7 @@ Run it for a small dataset with small number of epochs and make sure that the mo
 
 ### 4.1 Evaluation
 
-After some models has been trained, we may want to see how they perform. So we will load the same (or maybe newly generated) dataset, and pass it through a selected model. So the main function will look roughly the same as the one in the training script, but with minor changes:
+After some models have been trained, we may want to see how they perform. So we will load the same (or maybe newly generated) dataset, and pass it through a selected model. So the main function will look roughly the same as the one in the training script, but with minor changes:
 
 ```python
 import os
@@ -1396,7 +1396,9 @@ if __name__ == '__main__':
         eval_model(model, dataloader)
 ```
 
-So basically we create a dataloader, then look at what models we have. Then one by one, we load these models and pass our dataloader through them. Now we need to implement the missing functions, like the one that loads a model from a file. It will look at the file name, and decide how to create the model object.
+So basically we create a dataloader, then look at what models we have. Then one by one, we load these models and pass our dataloader through them. 
+
+Now we need to implement the missing functions, like the one that loads a model from a file. It will look at the file name, and decide how to create the model object.
 
 ```python
 def load_from_file(f):
@@ -1451,11 +1453,11 @@ Note that we are plotting the output as lines, corresponding to sin and cos pred
 
 ![01_eval](C:\Users\vpogribnyi\Documents\Dojo\ML\OpenCircle\v3\images\04_analysis\01_eval.png)
 
-Also we visually understand what does the final loss mean. If we have MSE of 0.12 after training - is it good or bad. Or to judge if the model predicts wrong really noisy images, or is bad in general. Ultimately, to see if it work at all. 
+Also, we visually understand what does the final loss mean. If we have MSE of 0.12 after training - whether it is good or bad. Or to judge if the model predicts wrong really noisy images, or is bad in general. Ultimately, to see if it work at all. 
 
 ### 4.2 Performance statistics
 
-Now that we have trained a bunch of models, we can see which parameters affect the model performance. Afterwards, we may choose a set of parameters for our final model(s)
+Now that we have trained a bunch of models, we can see which parameters affect the model performance. Afterward, we may choose a set of parameters for our final model.
 
 To do that, we will find correlation scores between the loss at the end of the training and the model parameters (filters number and pooling size).
 
@@ -1506,7 +1508,7 @@ pool1_size   -0.407319
 pool2_size    0.133425
 ```
 
-This tells us that the larger pool1_size, for example, we use - the smaller will be the loss. But if we take large pool2_size - the loss tend to be larger. Let's make a couple of plots:
+This tells us that the larger pool1_size, for example, we use - the smaller will be the loss. But if we take large pool2_size - the loss tends to be larger. Let's make a couple of plots:
 
 ```python
 import matplotlib.pyplot as plt
@@ -1525,7 +1527,7 @@ This will give an image like this:
 
 We see that the model on average performs better with smaller ks2, but the best result was obtained with a large ks2, which is interesting.
 
-I plan to keep working with the models, so I will choose ones with the most promising parameters. I will modify the training script, the part in which we test different parameter sets:
+I plan to keep experimenting with the models, so I will choose the ones with the most promising parameters. I will modify the training script, the part in which we test different parameter sets:
 
 ```python
     for ch1 in [4]:
